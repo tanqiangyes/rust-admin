@@ -14,100 +14,168 @@ export const api = {
     return await invoke('get_current_user', { userId })
   },
 
-  // 用户管理
+  // 用户管理（需要token）
   async getUsers(params = {}) {
-    return await invoke('get_users', params)
+    const token = localStorage.getItem('token')
+    return await invoke('get_users', { 
+      token,
+      ...params 
+    })
   },
   
   async createUser(userData) {
-    return await invoke('create_user', { request: userData })
+    const token = localStorage.getItem('token')
+    return await invoke('create_user', { 
+      token,
+      request: userData 
+    })
   },
   
   async updateUser(id, userData) {
-    return await invoke('update_user', { userId: id, request: userData })
+    const token = localStorage.getItem('token')
+    return await invoke('update_user', { 
+      token,
+      userId: id, 
+      request: userData 
+    })
   },
   
   async deleteUser(id) {
-    return await invoke('delete_user', { userId: id })
-  },
-
-  // 新增：检查用户是否可删除
-  async canDeleteUser(id) {
-    return await invoke('can_delete_user', { userId: id })
+    const token = localStorage.getItem('token')
+    return await invoke('delete_user', { 
+      token,
+      userId: id 
+    })
   },
 
   // 商品管理
   async getProducts(params = {}) {
-    return await invoke('get_products', params)
+    const token = localStorage.getItem('token')
+    return await invoke('get_products', { 
+      token,
+      ...params 
+    })
   },
   
   async createProduct(productData) {
-    return await invoke('create_product', { request: productData })
+    const token = localStorage.getItem('token')
+    return await invoke('create_product', { 
+      token,
+      request: productData 
+    })
   },
   
   async updateProduct(id, productData) {
-    return await invoke('update_product', { productId: id, request: productData })
+    const token = localStorage.getItem('token')
+    return await invoke('update_product', { 
+      token,
+      productId: id, 
+      request: productData 
+    })
   },
   
   async deleteProduct(id) {
-    return await invoke('delete_product', { productId: id })
+    const token = localStorage.getItem('token')
+    return await invoke('delete_product', { 
+      token,
+      productId: id 
+    })
   },
 
   // 订单管理
   async getOrders(params = {}) {
-    return await invoke('get_orders', params)
+    const token = localStorage.getItem('token')
+    return await invoke('get_orders', { 
+      token,
+      ...params 
+    })
   },
   
   async getOrderById(id) {
-    return await invoke('get_order_by_id', { orderId: id })
+    const token = localStorage.getItem('token')
+    return await invoke('get_order_by_id', { 
+      token,
+      orderId: id 
+    })
   },
   
   async updateOrderStatus(id, status) {
-    return await invoke('update_order_status', { orderId: id, status })
+    const token = localStorage.getItem('token')
+    return await invoke('update_order_status', { 
+      token,
+      orderId: id, 
+      status 
+    })
   },
 
   // 分类管理
   async getCategories() {
-    return await invoke('get_categories')
+    const token = localStorage.getItem('token')
+    return await invoke('get_categories', { token })
   },
   
   async createCategory(categoryData) {
-    return await invoke('create_category', { request: categoryData })
+    const token = localStorage.getItem('token')
+    return await invoke('create_category', { 
+      token,
+      request: categoryData 
+    })
   },
   
   async updateCategory(id, categoryData) {
-    return await invoke('update_category', { categoryId: id, request: categoryData })
+    const token = localStorage.getItem('token')
+    return await invoke('update_category', { 
+      token,
+      categoryId: id, 
+      request: categoryData 
+    })
   },
   
   async deleteCategory(id) {
-    return await invoke('delete_category', { categoryId: id })
+    const token = localStorage.getItem('token')
+    return await invoke('delete_category', { 
+      token,
+      categoryId: id 
+    })
   },
 
   // 角色管理
   async getRoles() {
-    return await invoke('get_roles')
+    const token = localStorage.getItem('token')
+    return await invoke('get_roles', { token })
   },
 
   // 统计信息
   async getDashboardStats() {
-    return await invoke('get_dashboard_stats')
+    const token = localStorage.getItem('token')
+    return await invoke('get_dashboard_stats', { token })
   },
 
   async getSystemInfo() {
-    return await invoke('get_system_info')
+    const token = localStorage.getItem('token')
+    return await invoke('get_system_info', { token })
   },
 
   // 设置
   async getAllSettings() {
-    return await invoke('get_all_settings')
+    const token = localStorage.getItem('token')
+    return await invoke('get_all_settings', { token })
   },
 
   async saveSystemSettings(settings) {
-    return await invoke('save_system_settings', { settings })
+    const token = localStorage.getItem('token')
+    return await invoke('save_system_settings', { 
+      token,
+      settings 
+    })
   },
 
   async saveUISettings(settings) {
-    return await invoke('save_ui_settings', { settings })
+    const token = localStorage.getItem('token')
+    return await invoke('save_ui_settings', { 
+      token,
+      settings 
+    })
   },
 
   async saveSecuritySettings(settings) {
@@ -119,6 +187,7 @@ export const api = {
   },
 
   async getSystemSettings() {
-    return await invoke('get_system_settings')
+    const token = localStorage.getItem('token')
+    return await invoke('get_system_settings', { token })
   }
 } 

@@ -62,23 +62,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const getCurrentUser = async () => {
-    if (!user.value) return null
-    
-    try {
-      const response = await invoke('get_current_user', { userId: user.value.id })
-      if (response.success) {
-        user.value = response.data
-        localStorage.setItem('user', JSON.stringify(response.data))
-        return response.data
-      }
-    } catch (error) {
-      console.error('Failed to get current user:', error)
-    }
-    
-    return user.value
-  }
-
   return {
     token,
     user,
@@ -86,7 +69,6 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     login,
     logout,
-    initAuth,
-    getCurrentUser
+    initAuth
   }
 }) 

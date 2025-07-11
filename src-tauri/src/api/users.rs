@@ -2,15 +2,54 @@ use tauri::State;
 use sqlx::Row;
 use crate::{AppState, models::user::*};
 use crate::api::{ApiResponse, PaginatedResponse};
+use crate::api::auth::{check_permission, get_user_id_from_token};
 
 #[tauri::command]
 pub async fn get_users(
     state: State<'_, AppState>,
+    token: String,
     page: Option<i32>,
     per_page: Option<i32>,
     search: Option<String>,
     status: Option<i32>,
 ) -> Result<ApiResponse<PaginatedResponse<UserWithRole>>, String> {
+    println!("get_users called with token: {}", token);
+    
+    // 权限检查
+    if let Some(user_id) = get_user_id_from_token(&token) {
+        println!("User ID from token: {}", user_id);
+        
+        let has_permission = check_permission(&state, user_id, "user:read").await?;
+        println!("Permission check result: {}", has_permission);
+        
+        if !has_permission {
+            return Ok(ApiResponse {
+                success: false,
+                data: PaginatedResponse {
+                    items: vec![],
+                    total: 0,
+                    page: 1,
+                    per_page: 10,
+                },
+                message: "没有权限访问用户管理".to_string(),
+            });
+        }
+    } else {
+        println!("Invalid token: {}", token);
+        return Ok(ApiResponse {
+            success: false,
+            data: PaginatedResponse {
+                items: vec![],
+                total: 0,
+                page: 1,
+                per_page: 10,
+            },
+            message: "无效的token".to_string(),
+        });
+    }
+
+    println!("Permission check passed, loading users...");
+
     let page = page.unwrap_or(1);
     let per_page = per_page.unwrap_or(10);
     let offset = (page - 1) * per_page;
@@ -56,13 +95,19 @@ pub async fn get_users(
     let total = count_query_builder
         .fetch_one(&state.db.pool)
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| {
+            println!("Database error in count query: {}", e);
+            e.to_string()
+        })?
         .get::<i64, _>(0);
 
     let rows = data_query_builder
         .fetch_all(&state.db.pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            println!("Database error in data query: {}", e);
+            e.to_string()
+        })?;
 
     let mut users = Vec::new();
     for row in rows {
@@ -81,6 +126,8 @@ pub async fn get_users(
         });
     }
 
+    println!("Successfully loaded {} users", users.len());
+
     Ok(ApiResponse::success(PaginatedResponse {
         items: users,
         total,
@@ -92,8 +139,18 @@ pub async fn get_users(
 #[tauri::command]
 pub async fn create_user(
     state: State<'_, AppState>,
+    token: String,
     request: CreateUserRequest,
 ) -> Result<ApiResponse<User>, String> {
+    // 权限检查
+    if let Some(user_id) = get_user_id_from_token(&token) {
+        if !check_permission(&state, user_id, "user:write").await? {
+            return Err("没有权限创建用户".to_string());
+        }
+    } else {
+        return Err("无效的token".to_string());
+    }
+
     let password_hash = bcrypt::hash(&request.password, bcrypt::DEFAULT_COST)
         .map_err(|e| e.to_string())?;
 

@@ -38,35 +38,49 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // 插入默认角色
+    // 确保管理员有正确的权限
     sqlx::query(
         r#"
-        INSERT OR IGNORE INTO roles (id, name, permissions)
+        INSERT OR REPLACE INTO roles (id, name, permissions)
         VALUES 
             (1, '超级管理员', '["*"]'),
-            (2, '管理员', '["user:read", "user:write", "product:read", "product:write", "order:read", "order:write"]'),
-            (3, '普通用户', '["order:read"]')
+            (2, '管理员', '["dashboard:read", "user:read", "user:write", "product:read", "product:write", "order:read", "order:write", "category:read", "category:write"]'),
+            (3, '普通用户', '["dashboard:read", "order:read"]')
         "#,
     )
     .execute(pool)
     .await?;
 
-    // 生成admin用户的密码哈希 (密码: admin123)
+    // 创建默认用户
     let admin_password_hash = bcrypt::hash("admin123", bcrypt::DEFAULT_COST)
         .unwrap_or_else(|_| "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkwzLUW9wjLXfGa".to_string());
 
-    // 插入默认用户
+    let manager_password_hash = bcrypt::hash("manager123", bcrypt::DEFAULT_COST)
+        .unwrap_or_else(|_| "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkwzLUW9wjLXfGa".to_string());
+
+    let user_password_hash = bcrypt::hash("user123", bcrypt::DEFAULT_COST)
+        .unwrap_or_else(|_| "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkwzLUW9wjLXfGa".to_string());
+
+    // 插入测试用户
     sqlx::query(
         r#"
         INSERT OR REPLACE INTO users (id, username, email, password_hash, role_id, status)
-        VALUES (1, 'admin', 'admin@example.com', ?, 1, 1)
+        VALUES 
+            (1, 'admin', 'admin@example.com', ?, 1, 1),
+            (2, 'manager', 'manager@example.com', ?, 2, 1),
+            (3, 'user', 'user@example.com', ?, 3, 1)
         "#,
     )
     .bind(&admin_password_hash)
+    .bind(&manager_password_hash)
+    .bind(&user_password_hash)
     .execute(pool)
     .await?;
 
-    println!("Admin user created with username: admin, password: admin123");
+    println!("Created test users:");
+    println!("  admin/admin123 (超级管理员)");
+    println!("  manager/manager123 (管理员)");
+    println!("  user/user123 (普通用户)");
 
     // 分类表
     sqlx::query(
@@ -191,6 +205,25 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .await?;
 
     println!("Database migrations completed successfully!");
+
+    // 在迁移的最后，添加权限验证
+    println!("Verifying permissions...");
+
+    // 检查管理员权限
+    let manager_permissions = sqlx::query_scalar::<_, String>(
+        "SELECT permissions FROM roles WHERE name = '管理员'"
+    )
+    .fetch_one(pool)
+    .await?;
+
+    println!("Manager permissions: {}", manager_permissions);
+
+    // 检查是否包含 user:read 权限
+    if manager_permissions.contains("user:read") {
+        println!("✓ Manager has user:read permission");
+    } else {
+        println!("✗ Manager missing user:read permission");
+    }
 
     Ok(())
 } 

@@ -154,8 +154,10 @@ import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import { api } from '@/api'
 import { getRoleTranslation, getRoleColor } from '@/utils/roleTranslation'
+import { usePermissionsStore } from '@/stores/permissions'
 
 const { t } = useI18n()
+const permissionsStore = usePermissionsStore()
 
 const users = ref([])
 const roles = ref([])
@@ -244,20 +246,25 @@ const isAdminUser = (user) => {
 const loadUsers = async () => {
   loading.value = true
   try {
+    console.log('Loading users...')
     const response = await api.getUsers({
       page: pagination.current,
       per_page: pagination.pageSize,
       search: searchForm.search,
-      status: searchForm.status,
-      role_id: searchForm.role_id
+      status: searchForm.status
     })
+    
+    console.log('Users API response:', response)
     
     if (response.success) {
       users.value = response.data.items
       pagination.total = response.data.total
+    } else {
+      message.error(response.message || t('common.error'))
     }
   } catch (error) {
-    message.error(t('common.error'))
+    console.error('Error loading users:', error)
+    message.error(t('common.error') + ': ' + (error.message || error))
   } finally {
     loading.value = false
   }
@@ -352,9 +359,13 @@ const resetForm = () => {
   form.status = 1
 }
 
-onMounted(() => {
-  loadUsers()
-  loadRoles()
+// 添加调试信息
+onMounted(async () => {
+  console.log('Current permissions:', permissionsStore.permissions)
+  console.log('Has user:read permission:', permissionsStore.hasPermission('user:read'))
+  
+  await loadUsers()
+  await loadRoles()
 })
 </script>
 

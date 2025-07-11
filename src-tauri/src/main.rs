@@ -4,6 +4,7 @@
 mod api;
 mod database;
 mod models;
+mod utils;
 
 use database::Database;
 use std::env;
@@ -32,7 +33,9 @@ async fn main() {
             api::auth::login,
             api::auth::logout,
             api::auth::get_current_user,
-            // 用户管理
+            api::auth::check_user_permission,
+            api::auth::get_user_permissions,
+            // 用户管理（已更新为需要权限）
             api::users::get_users,
             api::users::create_user,
             api::users::update_user,

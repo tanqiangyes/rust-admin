@@ -87,6 +87,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
+import { usePermissionsStore } from '@/stores/permissions'
 import { getRoleTranslation, getRoleColor } from '@/utils/roleTranslation'
 import {
   MenuFoldOutlined,
@@ -107,6 +108,7 @@ const route = useRoute()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const permissionsStore = usePermissionsStore()
 
 const collapsed = ref(false)
 const selectedKeys = ref([])
@@ -121,44 +123,71 @@ const userInfo = reactive({
 })
 
 // 计算菜单项（响应语言变化）
-const menuItems = computed(() => [
-  {
-    key: '/dashboard',
-    icon: h(DashboardOutlined),
-    label: t('menu.dashboard'),
-    title: t('menu.dashboard')
-  },
-  {
-    key: '/users',
-    icon: h(UserOutlined),
-    label: t('menu.users'),
-    title: t('menu.users')
-  },
-  {
-    key: '/products',
-    icon: h(ShoppingOutlined),
-    label: t('menu.products'),
-    title: t('menu.products')
-  },
-  {
-    key: '/orders',
-    icon: h(ShoppingCartOutlined),
-    label: t('menu.orders'),
-    title: t('menu.orders')
-  },
-  {
-    key: '/categories',
-    icon: h(AppstoreOutlined),
-    label: t('menu.categories'),
-    title: t('menu.categories')
-  },
-  {
-    key: '/settings',
-    icon: h(SettingOutlined),
-    label: t('menu.settings'),
-    title: t('menu.settings')
+const menuItems = computed(() => {
+  const items = []
+  
+  // 仪表盘 - 所有人都能访问
+  if (permissionsStore.hasPermission('dashboard:read')) {
+    items.push({
+      key: '/dashboard',
+      icon: h(DashboardOutlined),
+      label: t('menu.dashboard'),
+      title: t('menu.dashboard')
+    })
   }
-])
+  
+  // 用户管理
+  if (permissionsStore.hasPermission('user:read')) {
+    items.push({
+      key: '/users',
+      icon: h(UserOutlined),
+      label: t('menu.users'),
+      title: t('menu.users')
+    })
+  }
+  
+  // 商品管理
+  if (permissionsStore.hasPermission('product:read')) {
+    items.push({
+      key: '/products',
+      icon: h(ShoppingOutlined),
+      label: t('menu.products'),
+      title: t('menu.products')
+    })
+  }
+  
+  // 订单管理
+  if (permissionsStore.hasPermission('order:read')) {
+    items.push({
+      key: '/orders',
+      icon: h(ShoppingCartOutlined),
+      label: t('menu.orders'),
+      title: t('menu.orders')
+    })
+  }
+  
+  // 分类管理
+  if (permissionsStore.hasPermission('category:read')) {
+    items.push({
+      key: '/categories',
+      icon: h(AppstoreOutlined),
+      label: t('menu.categories'),
+      title: t('menu.categories')
+    })
+  }
+  
+  // 系统设置 - 只有超级管理员能访问
+  if (permissionsStore.hasPermission('settings:read')) {
+    items.push({
+      key: '/settings',
+      icon: h(SettingOutlined),
+      label: t('menu.settings'),
+      title: t('menu.settings')
+    })
+  }
+  
+  return items
+})
 
 // 当前页面标题（响应语言变化）
 const currentPageTitle = computed(() => {
@@ -260,6 +289,9 @@ onMounted(async () => {
   
   // 加载当前用户信息
   await loadCurrentUser()
+  
+  // 加载权限
+  await permissionsStore.loadPermissions()
 })
 </script>
 

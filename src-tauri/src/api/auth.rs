@@ -1,6 +1,71 @@
 use tauri::State;
-use crate::{AppState, models::user::*};
+use crate::{AppState, models::user::*, utils::permissions::Permission};
 use crate::api::ApiResponse;
+
+// 权限检查函数
+pub async fn check_permission(
+    state: &State<'_, AppState>,
+    user_id: i64,
+    required_permission: &str,
+) -> Result<bool, String> {
+    // 获取用户角色权限
+    let permissions = sqlx::query_scalar::<_, String>(
+        "SELECT r.permissions FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?"
+    )
+    .bind(user_id)
+    .fetch_one(&state.db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(Permission::has_permission(&permissions, required_permission))
+}
+
+// 获取当前用户ID（从token中解析，这里简化处理）
+pub fn get_user_id_from_token(token: &str) -> Option<i64> {
+    // 这里是简化的token解析，实际项目中应该使用JWT
+    if token.starts_with("token_") {
+        let parts: Vec<&str> = token.split('_').collect();
+        if parts.len() >= 2 {
+            return parts[1].parse().ok();
+        }
+    }
+    None
+}
+
+#[tauri::command]
+pub async fn check_user_permission(
+    state: State<'_, AppState>,
+    token: String,
+    permission: String,
+) -> Result<ApiResponse<bool>, String> {
+    if let Some(user_id) = get_user_id_from_token(&token) {
+        let has_permission = check_permission(&state, user_id, &permission).await?;
+        Ok(ApiResponse::success(has_permission))
+    } else {
+        Ok(ApiResponse::success(false))
+    }
+}
+
+#[tauri::command]
+pub async fn get_user_permissions(
+    state: State<'_, AppState>,
+    token: String,
+) -> Result<ApiResponse<Vec<String>>, String> {
+    if let Some(user_id) = get_user_id_from_token(&token) {
+        let permissions = sqlx::query_scalar::<_, String>(
+            "SELECT r.permissions FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?"
+        )
+        .bind(user_id)
+        .fetch_one(&state.db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let user_permissions = Permission::get_permissions(&permissions);
+        Ok(ApiResponse::success(user_permissions))
+    } else {
+        Ok(ApiResponse::success(vec![]))
+    }
+}
 
 #[tauri::command]
 pub async fn login(
