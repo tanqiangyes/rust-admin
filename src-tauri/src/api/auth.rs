@@ -1,42 +1,103 @@
 use tauri::State;
-use crate::AppState;
-use crate::models::user::{User, LoginRequest, LoginResponse};
+use crate::{AppState, models::user::*};
 use crate::api::ApiResponse;
-use bcrypt::verify;
 
 #[tauri::command]
 pub async fn login(
     state: State<'_, AppState>,
     request: LoginRequest,
 ) -> Result<ApiResponse<LoginResponse>, String> {
-    let user = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE username = ? AND status = 1"
+    println!("Login attempt for username: {}", request.username);
+    
+    // 查找用户
+    let user_result = sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE username = ? OR email = ?"
     )
+    .bind(&request.username)
     .bind(&request.username)
     .fetch_optional(&state.db.pool)
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| {
+        println!("Database error: {}", e);
+        format!("数据库错误: {}", e)
+    })?;
 
-    if let Some(user) = user {
-        if verify(&request.password, &user.password_hash).unwrap_or(false) {
-            let token = format!("token_{}", user.id);
-            
-            let response = LoginResponse {
-                token,
-                user,
-            };
-            
-            Ok(ApiResponse::success(response))
-        } else {
-            Ok(ApiResponse::error("Invalid credentials".to_string()))
+    let user = match user_result {
+        Some(user) => user,
+        None => {
+            println!("User not found: {}", request.username);
+            return Ok(ApiResponse {
+                success: false,
+                data: LoginResponse::default(),
+                message: "用户名或密码错误".to_string(),
+            });
         }
-    } else {
-        Ok(ApiResponse::error("User not found".to_string()))
+    };
+
+    // 验证密码
+    let password_valid = bcrypt::verify(&request.password, &user.password_hash)
+        .map_err(|e| {
+            println!("Password verification error: {}", e);
+            format!("密码验证错误: {}", e)
+        })?;
+
+    if !password_valid {
+        println!("Invalid password for user: {}", request.username);
+        return Ok(ApiResponse {
+            success: false,
+            data: LoginResponse::default(),
+            message: "用户名或密码错误".to_string(),
+        });
     }
+
+    // 检查用户状态
+    if user.status != 1 {
+        println!("User is disabled: {}", request.username);
+        return Ok(ApiResponse {
+            success: false,
+            data: LoginResponse::default(),
+            message: "用户账户已被禁用".to_string(),
+        });
+    }
+
+    // 获取用户角色信息
+    let role_name = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM roles WHERE id = ?"
+    )
+    .bind(user.role_id)
+    .fetch_one(&state.db.pool)
+    .await
+    .unwrap_or_else(|_| "普通用户".to_string());
+
+    // 生成简单的token
+    let token = format!("token_{}_{}", user.id, chrono::Utc::now().timestamp());
+
+    println!("Login successful for user: {}", request.username);
+
+    let response = LoginResponse {
+        token,
+        user: UserWithRole {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            phone: user.phone,
+            address: user.address,
+            avatar: user.avatar,
+            role_id: user.role_id,
+            role_name,
+            status: user.status,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+        },
+    };
+
+    Ok(ApiResponse::success(response))
 }
 
 #[tauri::command]
-pub async fn logout() -> Result<ApiResponse<()>, String> {
+pub async fn logout(
+    _state: State<'_, AppState>,
+) -> Result<ApiResponse<()>, String> {
     Ok(ApiResponse::success(()))
 }
 
@@ -44,18 +105,36 @@ pub async fn logout() -> Result<ApiResponse<()>, String> {
 pub async fn get_current_user(
     state: State<'_, AppState>,
     user_id: i64,
-) -> Result<ApiResponse<User>, String> {
+) -> Result<ApiResponse<UserWithRole>, String> {
     let user = sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE id = ?"
     )
     .bind(user_id)
-    .fetch_optional(&state.db.pool)
+    .fetch_one(&state.db.pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    if let Some(user) = user {
-        Ok(ApiResponse::success(user))
-    } else {
-        Ok(ApiResponse::error("User not found".to_string()))
-    }
+    let role_name = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM roles WHERE id = ?"
+    )
+    .bind(user.role_id)
+    .fetch_one(&state.db.pool)
+    .await
+    .unwrap_or_else(|_| "普通用户".to_string());
+
+    let user_with_role = UserWithRole {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        avatar: user.avatar,
+        role_id: user.role_id,
+        role_name,
+        status: user.status,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+    };
+
+    Ok(ApiResponse::success(user_with_role))
 } 

@@ -53,7 +53,13 @@
                   <user-outlined />
                   {{ $t('user.profile') }}
                 </a-menu-item>
-                <a-menu-item key="settings">
+                <a-menu-item key="role" disabled>
+                  <team-outlined />
+                  <a-tag :color="getRoleColor(userInfo.role_name)" size="small">
+                    {{ getUserRoleTranslation }}
+                  </a-tag>
+                </a-menu-item>
+                <a-menu-item key="settings" @click="goToSettings">
                   <setting-outlined />
                   {{ $t('menu.settings') }}
                 </a-menu-item>
@@ -81,6 +87,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
+import { getRoleTranslation, getRoleColor } from '@/utils/roleTranslation'
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -91,7 +98,8 @@ import {
   AppstoreOutlined,
   SettingOutlined,
   DownOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  TeamOutlined
 } from '@ant-design/icons-vue'
 
 const router = useRouter()
@@ -106,7 +114,9 @@ const openKeys = ref([])
 const currentLanguage = ref(locale.value)
 
 const userInfo = reactive({
-  username: '管理员',
+  username: 'admin',
+  role_id: 1, // 使用角色ID而不是角色名
+  role_name: '超级管理员', // 保留原始名称作为备用
   avatar: 'https://avatars.githubusercontent.com/u/1?v=4'
 })
 
@@ -173,9 +183,29 @@ const handleLanguageChange = async (lang) => {
   })
 }
 
+const goToSettings = () => {
+  router.push('/settings')
+}
+
 const handleLogout = () => {
   authStore.logout()
   router.push('/login')
+}
+
+// 加载当前用户信息
+const loadCurrentUser = async () => {
+  try {
+    // 这里应该从 authStore 或 API 获取当前用户信息
+    // 暂时使用硬编码的数据，您可以根据实际情况修改
+    if (authStore.user) {
+      userInfo.username = authStore.user.username || 'admin'
+      userInfo.role_id = authStore.user.role_id || 1 // 假设默认角色ID为1
+      userInfo.role_name = authStore.user.role_name || '超级管理员'
+      userInfo.avatar = authStore.user.avatar || 'https://avatars.githubusercontent.com/u/1?v=4'
+    }
+  } catch (error) {
+    console.error('Failed to load user info:', error)
+  }
 }
 
 // 监听路由变化，更新选中的菜单项
@@ -195,6 +225,28 @@ watch(
   }
 )
 
+// 监听语言变化，重新获取用户信息（如果角色名来自后端且需要翻译）
+watch(
+  () => locale.value,
+  () => {
+    // 如果角色名来自后端且是多语言的，这里需要重新获取
+    // loadCurrentUser()
+  }
+)
+
+// 根据角色ID获取翻译
+const getUserRoleTranslation = computed(() => {
+  // 角色ID到key的映射
+  const roleIdMap = {
+    1: 'super_admin',
+    2: 'admin',
+    3: 'user'
+  }
+  
+  const roleKey = roleIdMap[userInfo.role_id] || 'user'
+  return t(`role.${roleKey}`)
+})
+
 onMounted(async () => {
   // 设置初始选中的菜单项
   selectedKeys.value = [route.path]
@@ -205,6 +257,9 @@ onMounted(async () => {
   // 设置当前语言
   currentLanguage.value = settingsStore.settings.ui.language
   locale.value = settingsStore.settings.ui.language
+  
+  // 加载当前用户信息
+  await loadCurrentUser()
 })
 </script>
 
@@ -237,5 +292,13 @@ onMounted(async () => {
   top: 0;
   z-index: 1;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.ant-menu-item-disabled) {
+  padding-left: 24px !important;
+}
+
+:deep(.ant-menu-item-disabled .ant-tag) {
+  margin-left: 8px;
 }
 </style> 

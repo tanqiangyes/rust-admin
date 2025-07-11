@@ -2,6 +2,20 @@ use sqlx::SqlitePool;
 use anyhow::Result;
 
 pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
+    // 角色表
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS roles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            permissions TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     // 用户表
     sqlx::query(
         r#"
@@ -16,26 +30,43 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             role_id INTEGER NOT NULL DEFAULT 3,
             status INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (role_id) REFERENCES roles(id)
         )
         "#,
     )
     .execute(pool)
     .await?;
 
-    // 角色表
+    // 插入默认角色
     sqlx::query(
         r#"
-        CREATE TABLE IF NOT EXISTS roles (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            permissions TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
+        INSERT OR IGNORE INTO roles (id, name, permissions)
+        VALUES 
+            (1, '超级管理员', '["*"]'),
+            (2, '管理员', '["user:read", "user:write", "product:read", "product:write", "order:read", "order:write"]'),
+            (3, '普通用户', '["order:read"]')
         "#,
     )
     .execute(pool)
     .await?;
+
+    // 生成admin用户的密码哈希 (密码: admin123)
+    let admin_password_hash = bcrypt::hash("admin123", bcrypt::DEFAULT_COST)
+        .unwrap_or_else(|_| "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkwzLUW9wjLXfGa".to_string());
+
+    // 插入默认用户
+    sqlx::query(
+        r#"
+        INSERT OR REPLACE INTO users (id, username, email, password_hash, role_id, status)
+        VALUES (1, 'admin', 'admin@example.com', ?, 1, 1)
+        "#,
+    )
+    .bind(&admin_password_hash)
+    .execute(pool)
+    .await?;
+
+    println!("Admin user created with username: admin, password: admin123");
 
     // 分类表
     sqlx::query(
@@ -65,7 +96,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             description TEXT,
             category_id INTEGER,
             stock INTEGER NOT NULL DEFAULT 0,
-            images TEXT, -- 存储为 JSON 字符串
+            images TEXT,
             status INTEGER NOT NULL DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -113,25 +144,6 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // 操作日志表
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            action TEXT NOT NULL,
-            module TEXT NOT NULL,
-            content TEXT,
-            ip TEXT,
-            user_agent TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
     // 系统设置表
     sqlx::query(
         r#"
@@ -149,46 +161,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // 插入默认角色
-    sqlx::query(
-        r#"
-        INSERT OR IGNORE INTO roles (id, name, permissions)
-        VALUES 
-            (1, '超级管理员', '["*"]'),
-            (2, '管理员', '["user:read", "user:write", "product:read", "product:write", "order:read", "order:write"]'),
-            (3, '普通用户', '["order:read"]')
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // 插入默认分类
-    sqlx::query(
-        r#"
-        INSERT OR IGNORE INTO categories (id, name, parent_id, sort_order, status)
-        VALUES 
-            (1, '电子产品', NULL, 1, 1),
-            (2, '服装', NULL, 2, 1),
-            (3, '图书', NULL, 3, 1),
-            (4, '手机', 1, 1, 1),
-            (5, '电脑', 1, 2, 1)
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // 插入默认用户
-    sqlx::query(
-        r#"
-        INSERT OR IGNORE INTO users (id, username, email, password_hash, role_id, status)
-        VALUES 
-            (1, 'admin', 'admin@example.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkwzLUW9wjLXfGa', 1, 1)
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // 插入默认系统设置
+    // 插入默认设置
     sqlx::query(
         r#"
         INSERT OR IGNORE INTO system_settings (setting_key, setting_value, setting_type, description)
@@ -198,15 +171,26 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             ('system_version', '1.0.0', 'string', '系统版本'),
             ('theme_color', '#1890ff', 'string', '主题颜色'),
             ('language', 'zh-CN', 'string', '系统语言'),
-            ('page_size', '10', 'number', '默认页面大小'),
-            ('enable_registration', 'false', 'boolean', '是否允许用户注册'),
-            ('session_timeout', '3600', 'number', '会话超时时间（秒）'),
-            ('max_login_attempts', '5', 'number', '最大登录尝试次数'),
-            ('maintenance_mode', 'false', 'boolean', '维护模式')
+            ('page_size', '10', 'number', '默认页面大小')
         "#,
     )
     .execute(pool)
     .await?;
+
+    // 插入一些测试分类
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO categories (id, name, parent_id, sort_order, status)
+        VALUES 
+            (1, '电子产品', NULL, 1, 1),
+            (2, '服装', NULL, 2, 1),
+            (3, '图书', NULL, 3, 1)
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    println!("Database migrations completed successfully!");
 
     Ok(())
 } 

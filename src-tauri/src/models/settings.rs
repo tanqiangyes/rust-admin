@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use chrono::{DateTime, Utc};
-use std::collections::HashMap;
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct SystemSetting {

@@ -30,6 +30,22 @@
             </a-select>
           </a-form-item>
           <a-form-item>
+            <a-select
+              v-model:value="searchForm.role_id"
+              :placeholder="$t('user.role')"
+              style="width: 140px;"
+              allowClear
+            >
+              <a-select-option
+                v-for="role in roles"
+                :key="role.id"
+                :value="role.id"
+              >
+                {{ getRoleTranslation(role.name, $t) }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
+          <a-form-item>
             <a-button type="primary" @click="handleSearch">{{ $t('common.search') }}</a-button>
             <a-button @click="handleReset" style="margin-left: 8px;">{{ $t('common.reset') }}</a-button>
           </a-form-item>
@@ -55,7 +71,7 @@
           </template>
           <template v-else-if="column.key === 'role_name'">
             <a-tag :color="getRoleColor(record.role_name)">
-              {{ record.role_name }}
+              {{ getRoleTranslation(record.role_name, $t) }}
             </a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
@@ -113,7 +129,7 @@
               :key="role.id"
               :value="role.id"
             >
-              {{ role.name }}
+              {{ getRoleTranslation(role.name, $t) }}
             </a-select-option>
           </a-select>
         </a-form-item>
@@ -137,6 +153,7 @@ import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import { api } from '@/api'
+import { getRoleTranslation, getRoleColor } from '@/utils/roleTranslation'
 
 const { t } = useI18n()
 
@@ -148,7 +165,8 @@ const isEdit = ref(false)
 
 const searchForm = reactive({
   search: '',
-  status: undefined
+  status: undefined,
+  role_id: undefined
 })
 
 const form = reactive({
@@ -223,19 +241,6 @@ const isAdminUser = (user) => {
   return user.username === 'admin' || user.id === 1 || user.role_id === 1
 }
 
-// 获取角色颜色
-const getRoleColor = (roleName) => {
-  const colorMap = {
-    '超级管理员': 'red',
-    '管理员': 'orange',
-    '普通用户': 'blue',
-    'Super Admin': 'red',
-    'Admin': 'orange',
-    'User': 'blue'
-  }
-  return colorMap[roleName] || 'default'
-}
-
 const loadUsers = async () => {
   loading.value = true
   try {
@@ -243,7 +248,8 @@ const loadUsers = async () => {
       page: pagination.current,
       per_page: pagination.pageSize,
       search: searchForm.search,
-      status: searchForm.status
+      status: searchForm.status,
+      role_id: searchForm.role_id
     })
     
     if (response.success) {
@@ -319,6 +325,7 @@ const handleSearch = () => {
 const handleReset = () => {
   searchForm.search = ''
   searchForm.status = undefined
+  searchForm.role_id = undefined
   pagination.current = 1
   loadUsers()
 }

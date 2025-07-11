@@ -66,6 +66,13 @@ const zhCN = {
     user_statistics: '用户统计',
     sales_trend: '销售趋势'
   },
+  role: {
+    super_admin: '超级管理员',
+    admin: '管理员',
+    user: '普通用户',
+    operator: '操作员',
+    viewer: '查看者'
+  },
   user: {
     title: '用户管理',
     username: '用户名',
@@ -217,6 +224,13 @@ const enUS = {
     recent_orders: 'Recent Orders',
     user_statistics: 'User Statistics',
     sales_trend: 'Sales Trend'
+  },
+  role: {
+    super_admin: 'Super Admin',
+    admin: 'Admin',
+    user: 'User',
+    operator: 'Operator',
+    viewer: 'Viewer'
   },
   user: {
     title: 'User Management',

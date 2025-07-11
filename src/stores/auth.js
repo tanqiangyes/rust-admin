@@ -1,41 +1,45 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { invoke } from '@tauri-apps/api/tauri'
+import { message } from 'ant-design-vue'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || '')
   const user = ref(null)
   const loading = ref(false)
 
-  const isAuthenticated = computed(() => !!token.value)
+  const isAuthenticated = computed(() => !!token.value && !!user.value)
 
   const login = async (credentials) => {
     loading.value = true
     try {
-      if (credentials.username === 'admin' && credentials.password === 'admin123') {
-        const mockUser = {
-          id: 1,
-          username: 'admin',
-          email: 'admin@example.com',
-          role: 'admin'
-        }
-        
-        token.value = 'mock-token-123'
-        user.value = mockUser
-        localStorage.setItem('token', token.value)
-        localStorage.setItem('user', JSON.stringify(mockUser))
-        
+      console.log('Attempting login with:', credentials.username)
+      
+      const response = await invoke('login', { request: credentials })
+      console.log('Login response:', response)
+      
+      if (response.success) {
+        token.value = response.data.token
+        user.value = response.data.user
+        localStorage.setItem('token', response.data.token)
+        localStorage.setItem('user', JSON.stringify(response.data.user))
+        console.log('Login successful, user:', response.data.user)
         return true
       } else {
+        console.error('Login failed:', response.message)
+        message.error(response.message || '登录失败')
         return false
       }
     } catch (error) {
+      console.error('Login error:', error)
+      message.error('登录失败: ' + (error.message || error))
       return false
     } finally {
       loading.value = false
     }
   }
 
-  const logout = async () => {
+  const logout = () => {
     token.value = ''
     user.value = null
     localStorage.removeItem('token')
@@ -47,9 +51,32 @@ export const useAuthStore = defineStore('auth', () => {
     const savedToken = localStorage.getItem('token')
     
     if (savedUser && savedToken) {
-      user.value = JSON.parse(savedUser)
-      token.value = savedToken
+      try {
+        user.value = JSON.parse(savedUser)
+        token.value = savedToken
+        console.log('Auth initialized with saved user:', user.value)
+      } catch (error) {
+        console.error('Failed to parse saved user:', error)
+        logout()
+      }
     }
+  }
+
+  const getCurrentUser = async () => {
+    if (!user.value) return null
+    
+    try {
+      const response = await invoke('get_current_user', { userId: user.value.id })
+      if (response.success) {
+        user.value = response.data
+        localStorage.setItem('user', JSON.stringify(response.data))
+        return response.data
+      }
+    } catch (error) {
+      console.error('Failed to get current user:', error)
+    }
+    
+    return user.value
   }
 
   return {
@@ -59,6 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     login,
     logout,
-    initAuth
+    initAuth,
+    getCurrentUser
   }
 }) 
