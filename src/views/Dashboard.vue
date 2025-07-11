@@ -1,43 +1,74 @@
 <template>
   <div class="dashboard">
-    <h1>仪表盘</h1>
-    <a-row :gutter="16">
+    <div class="page-header">
+      <h2>{{ $t('dashboard.title') }}</h2>
+      <p>{{ $t('dashboard.welcome') }} {{ systemName }}</p>
+    </div>
+
+    <!-- 统计卡片 -->
+    <a-row :gutter="16" style="margin-bottom: 20px;">
       <a-col :span="6">
         <a-card>
           <a-statistic
-            title="用户总数"
-            :value="1234"
+            :title="$t('dashboard.total_users')"
+            :value="stats.total_users"
             :value-style="{ color: '#3f8600' }"
-          />
+          >
+            <template #prefix>
+              <user-outlined />
+            </template>
+          </a-statistic>
         </a-card>
       </a-col>
       <a-col :span="6">
         <a-card>
           <a-statistic
-            title="商品总数"
-            :value="567"
-            :value-style="{ color: '#1890ff' }"
-          />
-        </a-card>
-      </a-col>
-      <a-col :span="6">
-        <a-card>
-          <a-statistic
-            title="订单总数"
-            :value="890"
+            :title="$t('dashboard.total_products')"
+            :value="stats.total_products"
             :value-style="{ color: '#cf1322' }"
-          />
+          >
+            <template #prefix>
+              <shopping-outlined />
+            </template>
+          </a-statistic>
         </a-card>
       </a-col>
       <a-col :span="6">
         <a-card>
           <a-statistic
-            title="今日销售额"
-            :value="12345.67"
-            prefix="¥"
+            :title="$t('dashboard.total_orders')"
+            :value="stats.total_orders"
+            :value-style="{ color: '#1890ff' }"
+          >
+            <template #prefix>
+              <shopping-cart-outlined />
+            </template>
+          </a-statistic>
+        </a-card>
+      </a-col>
+      <a-col :span="6">
+        <a-card>
+          <a-statistic
+            :title="$t('dashboard.total_revenue')"
+            :value="stats.total_revenue"
             :precision="2"
             :value-style="{ color: '#722ed1' }"
+            prefix="¥"
           />
+        </a-card>
+      </a-col>
+    </a-row>
+
+    <!-- 图表区域 -->
+    <a-row :gutter="16">
+      <a-col :span="12">
+        <a-card :title="$t('dashboard.user_statistics')">
+          <p>{{ $t('dashboard.user_statistics') }} Chart Here</p>
+        </a-card>
+      </a-col>
+      <a-col :span="12">
+        <a-card :title="$t('dashboard.sales_trend')">
+          <p>{{ $t('dashboard.sales_trend') }} Chart Here</p>
         </a-card>
       </a-col>
     </a-row>
@@ -45,11 +76,64 @@
 </template>
 
 <script setup>
-// 仪表盘页面
+import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useSettingsStore } from '@/stores/settings'
+import { api } from '@/api'
+import {
+  UserOutlined,
+  ShoppingOutlined,
+  ShoppingCartOutlined
+} from '@ant-design/icons-vue'
+
+const { t } = useI18n()
+const settingsStore = useSettingsStore()
+
+const systemName = ref('Rust Admin')
+const stats = reactive({
+  total_users: 0,
+  total_products: 0,
+  total_orders: 0,
+  total_revenue: 0
+})
+
+const loadStats = async () => {
+  try {
+    const response = await api.getDashboardStats()
+    if (response.success) {
+      Object.assign(stats, response.data)
+    }
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+  }
+}
+
+onMounted(async () => {
+  // 加载设置
+  await settingsStore.loadSettings()
+  systemName.value = settingsStore.settings.system.system_name
+
+  // 加载统计数据
+  loadStats()
+})
 </script>
 
 <style scoped>
 .dashboard {
-  padding: 0;
+  padding: 20px;
+}
+
+.page-header {
+  margin-bottom: 20px;
+}
+
+.page-header h2 {
+  margin: 0;
+  margin-bottom: 8px;
+}
+
+.page-header p {
+  color: #666;
+  margin: 0;
 }
 </style> 

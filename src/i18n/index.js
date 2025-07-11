@@ -1,7 +1,22 @@
 import { createI18n } from 'vue-i18n'
 
-// 直接定义语言包
+// 中文语言包
 const zhCN = {
+  app: {
+    name: 'Rust Admin',
+    description: '基于 Tauri + Vue 3 的后台管理系统'
+  },
+  auth: {
+    login: '登录',
+    logout: '退出登录',
+    username: '用户名',
+    password: '密码',
+    remember: '记住我',
+    forgot_password: '忘记密码',
+    login_success: '登录成功',
+    login_failed: '登录失败',
+    logout_success: '退出成功'
+  },
   common: {
     confirm: '确认',
     cancel: '取消',
@@ -13,7 +28,22 @@ const zhCN = {
     reset: '重置',
     loading: '加载中...',
     success: '操作成功',
-    error: '操作失败'
+    error: '操作失败',
+    submit: '提交',
+    close: '关闭',
+    refresh: '刷新',
+    export: '导出',
+    import: '导入',
+    view: '查看',
+    enable: '启用',
+    disable: '禁用',
+    status: '状态',
+    action: '操作',
+    created_at: '创建时间',
+    updated_at: '更新时间',
+    description: '描述',
+    name: '名称',
+    total: '总计'
   },
   menu: {
     dashboard: '仪表盘',
@@ -21,7 +51,78 @@ const zhCN = {
     products: '商品管理',
     orders: '订单管理',
     categories: '分类管理',
-    settings: '系统设置'
+    settings: '系统设置',
+    profile: '个人资料'
+  },
+  dashboard: {
+    title: '仪表盘',
+    welcome: '欢迎使用',
+    total_users: '用户总数',
+    total_products: '商品总数',
+    total_orders: '订单总数',
+    total_revenue: '总收入',
+    recent_orders: '最近订单',
+    user_statistics: '用户统计',
+    sales_trend: '销售趋势'
+  },
+  user: {
+    title: '用户管理',
+    username: '用户名',
+    email: '邮箱',
+    phone: '电话',
+    address: '地址',
+    avatar: '头像',
+    role: '角色',
+    status: '状态',
+    profile: '个人资料',
+    create_user: '新增用户',
+    edit_user: '编辑用户',
+    delete_user: '删除用户',
+    cannot_delete_admin: '管理员账户不可删除',
+    admin_fields_readonly: '管理员账户的敏感信息不可修改',
+    user_created: '用户创建成功',
+    user_updated: '用户更新成功',
+    user_deleted: '用户删除成功'
+  },
+  product: {
+    title: '商品管理',
+    name: '商品名称',
+    price: '价格',
+    stock: '库存',
+    category: '分类',
+    images: '图片',
+    create_product: '新增商品',
+    edit_product: '编辑商品',
+    delete_product: '删除商品',
+    product_created: '商品创建成功',
+    product_updated: '商品更新成功',
+    product_deleted: '商品删除成功',
+    on_sale: '上架',
+    off_sale: '下架'
+  },
+  order: {
+    title: '订单管理',
+    order_no: '订单号',
+    user: '用户',
+    total_amount: '总金额',
+    items: '商品',
+    order_details: '订单详情',
+    pending: '待付款',
+    paid: '已付款',
+    shipped: '已发货',
+    delivered: '已完成',
+    cancelled: '已取消'
+  },
+  category: {
+    title: '分类管理',
+    parent_category: '父级分类',
+    sort_order: '排序',
+    create_category: '新增分类',
+    edit_category: '编辑分类',
+    delete_category: '删除分类',
+    category_created: '分类创建成功',
+    category_updated: '分类更新成功',
+    category_deleted: '分类删除成功'
   },
   settings: {
     title: '系统设置',
@@ -38,21 +139,28 @@ const zhCN = {
     enable_registration: '允许注册',
     session_timeout: '会话超时(秒)',
     max_login_attempts: '最大登录尝试',
-    maintenance_mode: '维护模式'
-  },
-  user: {
-    username: '用户名',
-    email: '邮箱',
-    phone: '电话',
-    status: '状态',
-    role: '角色',
-    created_at: '创建时间',
-    cannot_delete_admin: '管理员账户不可删除',
-    admin_fields_readonly: '管理员账户的敏感信息不可修改'
+    maintenance_mode: '维护模式',
+    settings_saved: '设置保存成功'
   }
 }
 
+// 英文语言包
 const enUS = {
+  app: {
+    name: 'Rust Admin',
+    description: 'Desktop Admin System based on Tauri + Vue 3'
+  },
+  auth: {
+    login: 'Login',
+    logout: 'Logout',
+    username: 'Username',
+    password: 'Password',
+    remember: 'Remember me',
+    forgot_password: 'Forgot password',
+    login_success: 'Login successful',
+    login_failed: 'Login failed',
+    logout_success: 'Logout successful'
+  },
   common: {
     confirm: 'Confirm',
     cancel: 'Cancel',
@@ -64,7 +172,22 @@ const enUS = {
     reset: 'Reset',
     loading: 'Loading...',
     success: 'Success',
-    error: 'Error'
+    error: 'Error',
+    submit: 'Submit',
+    close: 'Close',
+    refresh: 'Refresh',
+    export: 'Export',
+    import: 'Import',
+    view: 'View',
+    enable: 'Enable',
+    disable: 'Disable',
+    status: 'Status',
+    action: 'Action',
+    created_at: 'Created At',
+    updated_at: 'Updated At',
+    description: 'Description',
+    name: 'Name',
+    total: 'Total'
   },
   menu: {
     dashboard: 'Dashboard',
@@ -72,7 +195,78 @@ const enUS = {
     products: 'Product Management',
     orders: 'Order Management',
     categories: 'Category Management',
-    settings: 'System Settings'
+    settings: 'System Settings',
+    profile: 'Profile'
+  },
+  dashboard: {
+    title: 'Dashboard',
+    welcome: 'Welcome to',
+    total_users: 'Total Users',
+    total_products: 'Total Products',
+    total_orders: 'Total Orders',
+    total_revenue: 'Total Revenue',
+    recent_orders: 'Recent Orders',
+    user_statistics: 'User Statistics',
+    sales_trend: 'Sales Trend'
+  },
+  user: {
+    title: 'User Management',
+    username: 'Username',
+    email: 'Email',
+    phone: 'Phone',
+    address: 'Address',
+    avatar: 'Avatar',
+    role: 'Role',
+    status: 'Status',
+    profile: 'Profile',
+    create_user: 'Create User',
+    edit_user: 'Edit User',
+    delete_user: 'Delete User',
+    cannot_delete_admin: 'Admin account cannot be deleted',
+    admin_fields_readonly: 'Admin account sensitive information cannot be modified',
+    user_created: 'User created successfully',
+    user_updated: 'User updated successfully',
+    user_deleted: 'User deleted successfully'
+  },
+  product: {
+    title: 'Product Management',
+    name: 'Product Name',
+    price: 'Price',
+    stock: 'Stock',
+    category: 'Category',
+    images: 'Images',
+    create_product: 'Create Product',
+    edit_product: 'Edit Product',
+    delete_product: 'Delete Product',
+    product_created: 'Product created successfully',
+    product_updated: 'Product updated successfully',
+    product_deleted: 'Product deleted successfully',
+    on_sale: 'On Sale',
+    off_sale: 'Off Sale'
+  },
+  order: {
+    title: 'Order Management',
+    order_no: 'Order No.',
+    user: 'User',
+    total_amount: 'Total Amount',
+    items: 'Items',
+    order_details: 'Order Details',
+    pending: 'Pending',
+    paid: 'Paid',
+    shipped: 'Shipped',
+    delivered: 'Delivered',
+    cancelled: 'Cancelled'
+  },
+  category: {
+    title: 'Category Management',
+    parent_category: 'Parent Category',
+    sort_order: 'Sort Order',
+    create_category: 'Create Category',
+    edit_category: 'Edit Category',
+    delete_category: 'Delete Category',
+    category_created: 'Category created successfully',
+    category_updated: 'Category updated successfully',
+    category_deleted: 'Category deleted successfully'
   },
   settings: {
     title: 'System Settings',
@@ -89,17 +283,8 @@ const enUS = {
     enable_registration: 'Enable Registration',
     session_timeout: 'Session Timeout (seconds)',
     max_login_attempts: 'Max Login Attempts',
-    maintenance_mode: 'Maintenance Mode'
-  },
-  user: {
-    username: 'Username',
-    email: 'Email',
-    phone: 'Phone',
-    status: 'Status',
-    role: 'Role',
-    created_at: 'Created At',
-    cannot_delete_admin: 'Admin account cannot be deleted',
-    admin_fields_readonly: 'Admin account sensitive information cannot be modified'
+    maintenance_mode: 'Maintenance Mode',
+    settings_saved: 'Settings saved successfully'
   }
 }
 
