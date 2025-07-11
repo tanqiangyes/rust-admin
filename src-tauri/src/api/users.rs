@@ -160,6 +160,35 @@ pub async fn delete_user(
     state: State<'_, AppState>,
     user_id: i64,
 ) -> Result<ApiResponse<()>, String> {
+    // 检查是否为admin用户（假设admin用户的ID为1，或者用户名为admin）
+    let user = sqlx::query("SELECT id, username FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_one(&state.db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let username: String = user.get("username");
+    
+    // 禁止删除admin用户
+    if username == "admin" || user_id == 1 {
+        return Err("不允许删除管理员账户".to_string());
+    }
+    
+    // 检查是否为超级管理员角色
+    let role_check = sqlx::query("SELECT role_id FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_one(&state.db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let role_id: i64 = role_check.get("role_id");
+    
+    // 禁止删除超级管理员（假设超级管理员角色ID为1）
+    if role_id == 1 {
+        return Err("不允许删除超级管理员".to_string());
+    }
+
+    // 执行删除操作
     sqlx::query("DELETE FROM users WHERE id = ?")
         .bind(user_id)
         .execute(&state.db.pool)
@@ -167,4 +196,25 @@ pub async fn delete_user(
         .map_err(|e| e.to_string())?;
 
     Ok(ApiResponse::success(()))
+}
+
+// 添加一个检查用户是否可删除的API
+#[tauri::command]
+pub async fn can_delete_user(
+    state: State<'_, AppState>,
+    user_id: i64,
+) -> Result<ApiResponse<bool>, String> {
+    let user = sqlx::query("SELECT username, role_id FROM users WHERE id = ?")
+        .bind(user_id)
+        .fetch_one(&state.db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let username: String = user.get("username");
+    let role_id: i64 = user.get("role_id");
+    
+    // admin用户或超级管理员不可删除
+    let can_delete = username != "admin" && user_id != 1 && role_id != 1;
+    
+    Ok(ApiResponse::success(can_delete))
 } 

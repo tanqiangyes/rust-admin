@@ -31,6 +31,11 @@ export const api = {
     return await invoke('delete_user', { userId: id })
   },
 
+  // 新增：检查用户是否可删除
+  async canDeleteUser(id) {
+    return await invoke('can_delete_user', { userId: id })
+  },
+
   // 商品管理
   async getProducts(params = {}) {
     return await invoke('get_products', params)

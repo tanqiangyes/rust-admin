@@ -37,6 +37,7 @@ async fn main() {
             api::users::create_user,
             api::users::update_user,
             api::users::delete_user,
+            api::users::can_delete_user, // 添加这个新命令
             // 商品管理
             api::products::get_products,
             api::products::create_product,

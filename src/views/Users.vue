@@ -1,10 +1,10 @@
 <template>
   <div class="users">
     <div class="page-header">
-      <h2>用户管理</h2>
+      <h2>{{ $t('menu.users') }}</h2>
       <a-button type="primary" @click="showCreateModal">
         <template #icon><plus-outlined /></template>
-        新增用户
+        {{ $t('common.add') }}用户
       </a-button>
     </div>
 
@@ -14,7 +14,7 @@
           <a-form-item>
             <a-input
               v-model:value="searchForm.search"
-              placeholder="搜索用户名或邮箱"
+              :placeholder="$t('common.search') + '用户名或邮箱'"
               style="width: 200px;"
             />
           </a-form-item>
@@ -30,8 +30,8 @@
             </a-select>
           </a-form-item>
           <a-form-item>
-            <a-button type="primary" @click="handleSearch">搜索</a-button>
-            <a-button @click="handleReset" style="margin-left: 8px;">重置</a-button>
+            <a-button type="primary" @click="handleSearch">{{ $t('common.search') }}</a-button>
+            <a-button @click="handleReset" style="margin-left: 8px;">{{ $t('common.reset') }}</a-button>
           </a-form-item>
         </a-form>
       </div>
@@ -53,14 +53,27 @@
               {{ record.status === 1 ? '启用' : '禁用' }}
             </a-tag>
           </template>
+          <template v-else-if="column.key === 'role_name'">
+            <a-tag :color="getRoleColor(record.role_name)">
+              {{ record.role_name }}
+            </a-tag>
+          </template>
           <template v-else-if="column.key === 'action'">
-            <a-button type="link" @click="editUser(record)">编辑</a-button>
+            <a-button type="link" @click="editUser(record)">{{ $t('common.edit') }}</a-button>
+            
+            <!-- 根据用户是否可删除显示不同的删除按钮 -->
             <a-popconfirm
+              v-if="canDelete(record)"
               title="确定要删除这个用户吗？"
               @confirm="deleteUser(record.id)"
             >
-              <a-button type="link" danger>删除</a-button>
+              <a-button type="link" danger>{{ $t('common.delete') }}</a-button>
             </a-popconfirm>
+            
+            <!-- 不可删除的用户显示禁用的删除按钮 -->
+            <a-tooltip v-else title="管理员账户不可删除">
+              <a-button type="link" danger disabled>{{ $t('common.delete') }}</a-button>
+            </a-tooltip>
           </template>
         </template>
       </a-table>
@@ -75,7 +88,10 @@
     >
       <a-form :model="form" :label-col="{ span: 6 }">
         <a-form-item label="用户名" name="username">
-          <a-input v-model:value="form.username" />
+          <a-input 
+            v-model:value="form.username" 
+            :disabled="isEdit && isAdminUser(form)"
+          />
         </a-form-item>
         <a-form-item label="邮箱" name="email">
           <a-input v-model:value="form.email" />
@@ -89,8 +105,25 @@
         <a-form-item label="地址" name="address">
           <a-input v-model:value="form.address" />
         </a-form-item>
+        <a-form-item label="角色" name="role_id">
+          <a-select 
+            v-model:value="form.role_id"
+            :disabled="isEdit && isAdminUser(form)"
+          >
+            <a-select-option
+              v-for="role in roles"
+              :key="role.id"
+              :value="role.id"
+            >
+              {{ role.name }}
+            </a-select-option>
+          </a-select>
+        </a-form-item>
         <a-form-item label="状态" name="status">
-          <a-select v-model:value="form.status">
+          <a-select 
+            v-model:value="form.status"
+            :disabled="isEdit && isAdminUser(form)"
+          >
             <a-select-option :value="1">启用</a-select-option>
             <a-select-option :value="0">禁用</a-select-option>
           </a-select>
@@ -107,6 +140,7 @@ import { PlusOutlined } from '@ant-design/icons-vue'
 import { api } from '@/api'
 
 const users = ref([])
+const roles = ref([])
 const loading = ref(false)
 const modalVisible = ref(false)
 const isEdit = ref(false)
@@ -123,6 +157,7 @@ const form = reactive({
   password: '',
   phone: '',
   address: '',
+  role_id: null,
   status: 1
 })
 
@@ -156,6 +191,11 @@ const columns = [
     key: 'phone'
   },
   {
+    title: '角色',
+    key: 'role_name',
+    width: 100
+  },
+  {
     title: '状态',
     key: 'status',
     width: 80
@@ -171,6 +211,26 @@ const columns = [
     width: 150
   }
 ]
+
+// 检查用户是否可删除
+const canDelete = (user) => {
+  return user.username !== 'admin' && user.id !== 1 && user.role_id !== 1
+}
+
+// 检查是否为管理员用户
+const isAdminUser = (user) => {
+  return user.username === 'admin' || user.id === 1 || user.role_id === 1
+}
+
+// 获取角色颜色
+const getRoleColor = (roleName) => {
+  const colorMap = {
+    '超级管理员': 'red',
+    '管理员': 'orange',
+    '普通用户': 'blue'
+  }
+  return colorMap[roleName] || 'default'
+}
 
 const loadUsers = async () => {
   loading.value = true
@@ -193,6 +253,17 @@ const loadUsers = async () => {
   }
 }
 
+const loadRoles = async () => {
+  try {
+    const response = await api.getRoles()
+    if (response.success) {
+      roles.value = response.data
+    }
+  } catch (error) {
+    message.error('加载角色列表失败')
+  }
+}
+
 const showCreateModal = () => {
   isEdit.value = false
   modalVisible.value = true
@@ -208,6 +279,11 @@ const editUser = (record) => {
 const handleSubmit = async () => {
   try {
     if (isEdit.value) {
+      // 如果是编辑管理员用户，给出提示
+      if (isAdminUser(form)) {
+        message.warning('管理员账户的敏感信息不可修改')
+      }
+      
       await api.updateUser(form.id, form)
       message.success('用户更新成功')
     } else {
@@ -218,7 +294,7 @@ const handleSubmit = async () => {
     modalVisible.value = false
     loadUsers()
   } catch (error) {
-    message.error('操作失败')
+    message.error('操作失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -228,7 +304,7 @@ const deleteUser = async (id) => {
     message.success('用户删除成功')
     loadUsers()
   } catch (error) {
-    message.error('删除失败')
+    message.error('删除失败: ' + (error.message || '未知错误'))
   }
 }
 
@@ -262,11 +338,13 @@ const resetForm = () => {
   form.password = ''
   form.phone = ''
   form.address = ''
+  form.role_id = null
   form.status = 1
 }
 
 onMounted(() => {
   loadUsers()
+  loadRoles()
 })
 </script>
 

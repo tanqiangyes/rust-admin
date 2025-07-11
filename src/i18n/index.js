@@ -45,7 +45,10 @@ const zhCN = {
     email: '邮箱',
     phone: '电话',
     status: '状态',
-    created_at: '创建时间'
+    role: '角色',
+    created_at: '创建时间',
+    cannot_delete_admin: '管理员账户不可删除',
+    admin_fields_readonly: '管理员账户的敏感信息不可修改'
   }
 }
 
@@ -93,7 +96,10 @@ const enUS = {
     email: 'Email',
     phone: 'Phone',
     status: 'Status',
-    created_at: 'Created At'
+    role: 'Role',
+    created_at: 'Created At',
+    cannot_delete_admin: 'Admin account cannot be deleted',
+    admin_fields_readonly: 'Admin account sensitive information cannot be modified'
   }
 }
 
