@@ -1,7 +1,7 @@
 <template>
   <div class="orders">
     <div class="page-header">
-      <h2>订单管理</h2>
+      <h2>{{ $t('order.title') }}</h2>
     </div>
 
     <a-card>
@@ -10,27 +10,27 @@
           <a-form-item>
             <a-input
               v-model:value="searchForm.search"
-              placeholder="搜索订单号"
+              :placeholder="$t('common.search') + $t('order.order_no')"
               style="width: 200px;"
             />
           </a-form-item>
           <a-form-item>
             <a-select
               v-model:value="searchForm.status"
-              placeholder="订单状态"
+              :placeholder="$t('common.status')"
               style="width: 120px;"
               allowClear
             >
-              <a-select-option value="pending">待付款</a-select-option>
-              <a-select-option value="paid">已付款</a-select-option>
-              <a-select-option value="shipped">已发货</a-select-option>
-              <a-select-option value="delivered">已完成</a-select-option>
-              <a-select-option value="cancelled">已取消</a-select-option>
+              <a-select-option value="pending">{{ $t('order.pending') }}</a-select-option>
+              <a-select-option value="paid">{{ $t('order.paid') }}</a-select-option>
+              <a-select-option value="shipped">{{ $t('order.shipped') }}</a-select-option>
+              <a-select-option value="delivered">{{ $t('order.delivered') }}</a-select-option>
+              <a-select-option value="cancelled">{{ $t('order.cancelled') }}</a-select-option>
             </a-select>
           </a-form-item>
           <a-form-item>
-            <a-button type="primary" @click="handleSearch">搜索</a-button>
-            <a-button @click="handleReset" style="margin-left: 8px;">重置</a-button>
+            <a-button type="primary" @click="handleSearch">{{ $t('common.search') }}</a-button>
+            <a-button @click="handleReset" style="margin-left: 8px;">{{ $t('common.reset') }}</a-button>
           </a-form-item>
         </a-form>
       </div>
@@ -55,17 +55,17 @@
             </a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a-button type="link" @click="viewOrder(record)">查看</a-button>
+            <a-button type="link" @click="viewOrder(record)">{{ $t('common.view') }}</a-button>
             <a-select
               v-model:value="record.status"
               @change="updateOrderStatus(record.id, $event)"
               style="width: 100px; margin-left: 8px;"
             >
-              <a-select-option value="pending">待付款</a-select-option>
-              <a-select-option value="paid">已付款</a-select-option>
-              <a-select-option value="shipped">已发货</a-select-option>
-              <a-select-option value="delivered">已完成</a-select-option>
-              <a-select-option value="cancelled">已取消</a-select-option>
+              <a-select-option value="pending">{{ $t('order.pending') }}</a-select-option>
+              <a-select-option value="paid">{{ $t('order.paid') }}</a-select-option>
+              <a-select-option value="shipped">{{ $t('order.shipped') }}</a-select-option>
+              <a-select-option value="delivered">{{ $t('order.delivered') }}</a-select-option>
+              <a-select-option value="cancelled">{{ $t('order.cancelled') }}</a-select-option>
             </a-select>
           </template>
         </template>
@@ -94,24 +94,24 @@
     <!-- 订单详情弹窗 -->
     <a-modal
       v-model:open="detailModalVisible"
-      title="订单详情"
+      :title="$t('order.order_details')"
       :footer="null"
       width="800px"
     >
       <div v-if="currentOrder">
         <a-descriptions bordered>
-          <a-descriptions-item label="订单号">{{ currentOrder.order_number }}</a-descriptions-item>
-          <a-descriptions-item label="用户">{{ currentOrder.user_name }}</a-descriptions-item>
-          <a-descriptions-item label="状态">
+          <a-descriptions-item :label="$t('order.order_no')">{{ currentOrder.order_no }}</a-descriptions-item>
+          <a-descriptions-item :label="$t('order.user')">{{ currentOrder.username }}</a-descriptions-item>
+          <a-descriptions-item :label="$t('common.status')">
             <a-tag :color="getStatusColor(currentOrder.status)">
               {{ getStatusText(currentOrder.status) }}
             </a-tag>
           </a-descriptions-item>
-          <a-descriptions-item label="总金额">¥{{ currentOrder.total_amount }}</a-descriptions-item>
-          <a-descriptions-item label="创建时间">{{ currentOrder.created_at }}</a-descriptions-item>
+          <a-descriptions-item :label="$t('order.total_amount')">¥{{ currentOrder.total_amount }}</a-descriptions-item>
+          <a-descriptions-item :label="$t('common.created_at')">{{ currentOrder.created_at }}</a-descriptions-item>
         </a-descriptions>
 
-        <h3 style="margin: 20px 0;">订单商品</h3>
+        <h3 style="margin: 20px 0;">{{ $t('order.items') }}</h3>
         <a-table
           :columns="itemColumns"
           :dataSource="currentOrder.items"
@@ -134,9 +134,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { api } from '@/api'
+
+const { t } = useI18n()
 
 const orders = ref([])
 const loading = ref(false)
@@ -157,62 +160,62 @@ const pagination = reactive({
   showQuickJumper: true
 })
 
-const columns = [
+const columns = computed(() => [
   {
-    title: '订单号',
-    dataIndex: 'order_number',
-    key: 'order_number'
+    title: t('order.order_no'),
+    dataIndex: 'order_no',
+    key: 'order_no'
   },
   {
-    title: '用户',
-    dataIndex: 'user_name',
-    key: 'user_name'
+    title: t('order.user'),
+    dataIndex: 'username',
+    key: 'username'
   },
   {
-    title: '总金额',
+    title: t('order.total_amount'),
     key: 'total_amount',
     width: 100
   },
   {
-    title: '状态',
+    title: t('common.status'),
     key: 'status',
     width: 100
   },
   {
-    title: '创建时间',
+    title: t('common.created_at'),
     dataIndex: 'created_at',
     key: 'created_at'
   },
   {
-    title: '操作',
+    title: t('common.action'),
     key: 'action',
     width: 200
   }
-]
+])
 
-const itemColumns = [
+const itemColumns = computed(() => [
   {
-    title: '商品名称',
+    title: t('product.name'),
     dataIndex: 'product_name',
     key: 'product_name'
   },
   {
-    title: '单价',
+    title: t('product.price'),
     key: 'price',
     width: 100
   },
   {
-    title: '数量',
+    title: t('order.quantity'),
     dataIndex: 'quantity',
     key: 'quantity',
     width: 80
   },
   {
-    title: '小计',
+    title: t('order.subtotal'),
     key: 'total',
     width: 100
   }
-]
+])
 
 const loadOrders = async () => {
   loading.value = true
@@ -229,7 +232,7 @@ const loadOrders = async () => {
       pagination.total = response.data.total
     }
   } catch (error) {
-    message.error('加载订单列表失败')
+    message.error(t('common.error'))
   } finally {
     loading.value = false
   }
@@ -247,14 +250,7 @@ const getStatusColor = (status) => {
 }
 
 const getStatusText = (status) => {
-  const texts = {
-    pending: '待付款',
-    paid: '已付款',
-    shipped: '已发货',
-    delivered: '已完成',
-    cancelled: '已取消'
-  }
-  return texts[status] || status
+  return t(`order.${status}`)
 }
 
 const viewOrder = (record) => {
@@ -265,10 +261,10 @@ const viewOrder = (record) => {
 const updateOrderStatus = async (orderId, status) => {
   try {
     await api.updateOrderStatus(orderId, status)
-    message.success('订单状态更新成功')
+    message.success(t('order.status_updated'))
     loadOrders()
   } catch (error) {
-    message.error('更新失败')
+    message.error(t('common.error'))
   }
 }
 

@@ -1,10 +1,10 @@
 <template>
   <div class="categories">
     <div class="page-header">
-      <h2>分类管理</h2>
+      <h2>{{ $t('category.title') }}</h2>
       <a-button type="primary" @click="showCreateModal">
         <template #icon><plus-outlined /></template>
-        新增分类
+        {{ $t('category.create_category') }}
       </a-button>
     </div>
 
@@ -19,16 +19,16 @@
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'status'">
             <a-tag :color="record.status === 1 ? 'green' : 'red'">
-              {{ record.status === 1 ? '启用' : '禁用' }}
+              {{ record.status === 1 ? $t('common.enable') : $t('common.disable') }}
             </a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a-button type="link" @click="editCategory(record)">编辑</a-button>
+            <a-button type="link" @click="editCategory(record)">{{ $t('common.edit') }}</a-button>
             <a-popconfirm
-              title="确定要删除这个分类吗？"
+              :title="$t('category.delete_confirm')"
               @confirm="deleteCategory(record.id)"
             >
-              <a-button type="link" danger>删除</a-button>
+              <a-button type="link" danger>{{ $t('common.delete') }}</a-button>
             </a-popconfirm>
           </template>
         </template>
@@ -38,18 +38,18 @@
     <!-- 新增/编辑分类弹窗 -->
     <a-modal
       v-model:open="modalVisible"
-      :title="isEdit ? '编辑分类' : '新增分类'"
+      :title="isEdit ? $t('category.edit_category') : $t('category.create_category')"
       @ok="handleSubmit"
       @cancel="handleCancel"
     >
       <a-form :model="form" :label-col="{ span: 6 }">
-        <a-form-item label="分类名称" name="name">
+        <a-form-item :label="$t('common.name')" name="name">
           <a-input v-model:value="form.name" />
         </a-form-item>
-        <a-form-item label="父级分类" name="parent_id">
+        <a-form-item :label="$t('category.parent_category')" name="parent_id">
           <a-select
             v-model:value="form.parent_id"
-            placeholder="选择父级分类"
+            :placeholder="$t('category.parent_category')"
             allowClear
           >
             <a-select-option
@@ -61,17 +61,17 @@
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="排序" name="sort_order">
+        <a-form-item :label="$t('category.sort_order')" name="sort_order">
           <a-input-number
             v-model:value="form.sort_order"
             :min="0"
             style="width: 100%;"
           />
         </a-form-item>
-        <a-form-item label="状态" name="status">
+        <a-form-item :label="$t('common.status')" name="status">
           <a-select v-model:value="form.status">
-            <a-select-option :value="1">启用</a-select-option>
-            <a-select-option :value="0">禁用</a-select-option>
+            <a-select-option :value="1">{{ $t('common.enable') }}</a-select-option>
+            <a-select-option :value="0">{{ $t('common.disable') }}</a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -81,9 +81,12 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import { api } from '@/api'
+
+const { t } = useI18n()
 
 const categories = ref([])
 const loading = ref(false)
@@ -102,7 +105,7 @@ const parentCategories = computed(() => {
   return categories.value.filter(cat => cat.parent_id === null)
 })
 
-const columns = [
+const columns = computed(() => [
   {
     title: 'ID',
     dataIndex: 'id',
@@ -110,37 +113,37 @@ const columns = [
     width: 80
   },
   {
-    title: '分类名称',
+    title: t('common.name'),
     dataIndex: 'name',
     key: 'name'
   },
   {
-    title: '父级分类',
+    title: t('category.parent_category'),
     dataIndex: 'parent_name',
     key: 'parent_name'
   },
   {
-    title: '排序',
+    title: t('category.sort_order'),
     dataIndex: 'sort_order',
     key: 'sort_order',
     width: 80
   },
   {
-    title: '状态',
+    title: t('common.status'),
     key: 'status',
     width: 80
   },
   {
-    title: '创建时间',
+    title: t('common.created_at'),
     dataIndex: 'created_at',
     key: 'created_at'
   },
   {
-    title: '操作',
+    title: t('common.action'),
     key: 'action',
     width: 150
   }
-]
+])
 
 const loadCategories = async () => {
   loading.value = true
@@ -150,7 +153,7 @@ const loadCategories = async () => {
       categories.value = response.data
     }
   } catch (error) {
-    message.error('加载分类列表失败')
+    message.error(t('common.error'))
   } finally {
     loading.value = false
   }
@@ -172,26 +175,26 @@ const handleSubmit = async () => {
   try {
     if (isEdit.value) {
       await api.updateCategory(form.id, form)
-      message.success('分类更新成功')
+      message.success(t('category.category_updated'))
     } else {
       await api.createCategory(form)
-      message.success('分类创建成功')
+      message.success(t('category.category_created'))
     }
     
     modalVisible.value = false
     loadCategories()
   } catch (error) {
-    message.error('操作失败')
+    message.error(t('common.error'))
   }
 }
 
 const deleteCategory = async (id) => {
   try {
     await api.deleteCategory(id)
-    message.success('分类删除成功')
+    message.success(t('category.category_deleted'))
     loadCategories()
   } catch (error) {
-    message.error('删除失败')
+    message.error(t('common.error'))
   }
 }
 

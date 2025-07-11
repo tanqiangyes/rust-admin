@@ -1,10 +1,10 @@
 <template>
   <div class="products">
     <div class="page-header">
-      <h2>商品管理</h2>
+      <h2>{{ $t('product.title') }}</h2>
       <a-button type="primary" @click="showCreateModal">
         <template #icon><plus-outlined /></template>
-        新增商品
+        {{ $t('product.create_product') }}
       </a-button>
     </div>
 
@@ -14,14 +14,14 @@
           <a-form-item>
             <a-input
               v-model:value="searchForm.search"
-              placeholder="搜索商品名称"
+              :placeholder="$t('common.search') + $t('product.name')"
               style="width: 200px;"
             />
           </a-form-item>
           <a-form-item>
             <a-select
               v-model:value="searchForm.category_id"
-              placeholder="分类"
+              :placeholder="$t('product.category')"
               style="width: 120px;"
               allowClear
             >
@@ -35,8 +35,8 @@
             </a-select>
           </a-form-item>
           <a-form-item>
-            <a-button type="primary" @click="handleSearch">搜索</a-button>
-            <a-button @click="handleReset" style="margin-left: 8px;">重置</a-button>
+            <a-button type="primary" @click="handleSearch">{{ $t('common.search') }}</a-button>
+            <a-button @click="handleReset" style="margin-left: 8px;">{{ $t('common.reset') }}</a-button>
           </a-form-item>
         </a-form>
       </div>
@@ -57,23 +57,23 @@
               :width="50" 
               :height="50" 
             />
-            <span v-else>无图片</span>
+            <span v-else>{{ $t('product.no_image') }}</span>
           </template>
           <template v-else-if="column.key === 'price'">
             ¥{{ record.price }}
           </template>
           <template v-else-if="column.key === 'status'">
             <a-tag :color="record.status === 1 ? 'green' : 'red'">
-              {{ record.status === 1 ? '上架' : '下架' }}
+              {{ record.status === 1 ? $t('product.on_sale') : $t('product.off_sale') }}
             </a-tag>
           </template>
           <template v-else-if="column.key === 'action'">
-            <a-button type="link" @click="editProduct(record)">编辑</a-button>
+            <a-button type="link" @click="editProduct(record)">{{ $t('common.edit') }}</a-button>
             <a-popconfirm
-              title="确定要删除这个商品吗？"
+              :title="$t('product.delete_confirm')"
               @confirm="deleteProduct(record.id)"
             >
-              <a-button type="link" danger>删除</a-button>
+              <a-button type="link" danger>{{ $t('common.delete') }}</a-button>
             </a-popconfirm>
           </template>
         </template>
@@ -83,16 +83,16 @@
     <!-- 新增/编辑商品弹窗 -->
     <a-modal
       v-model:open="modalVisible"
-      :title="isEdit ? '编辑商品' : '新增商品'"
+      :title="isEdit ? $t('product.edit_product') : $t('product.create_product')"
       @ok="handleSubmit"
       @cancel="handleCancel"
       width="600px"
     >
       <a-form :model="form" :label-col="{ span: 6 }">
-        <a-form-item label="商品名称" name="name">
+        <a-form-item :label="$t('product.name')" name="name">
           <a-input v-model:value="form.name" />
         </a-form-item>
-        <a-form-item label="价格" name="price">
+        <a-form-item :label="$t('product.price')" name="price">
           <a-input-number
             v-model:value="form.price"
             :min="0"
@@ -100,14 +100,14 @@
             style="width: 100%;"
           />
         </a-form-item>
-        <a-form-item label="库存" name="stock">
+        <a-form-item :label="$t('product.stock')" name="stock">
           <a-input-number
             v-model:value="form.stock"
             :min="0"
             style="width: 100%;"
           />
         </a-form-item>
-        <a-form-item label="分类" name="category_id">
+        <a-form-item :label="$t('product.category')" name="category_id">
           <a-select v-model:value="form.category_id">
             <a-select-option
               v-for="category in categories"
@@ -118,16 +118,16 @@
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="描述" name="description">
+        <a-form-item :label="$t('common.description')" name="description">
           <a-textarea
             v-model:value="form.description"
             :rows="4"
           />
         </a-form-item>
-        <a-form-item label="状态" name="status">
+        <a-form-item :label="$t('common.status')" name="status">
           <a-select v-model:value="form.status">
-            <a-select-option :value="1">上架</a-select-option>
-            <a-select-option :value="0">下架</a-select-option>
+            <a-select-option :value="1">{{ $t('product.on_sale') }}</a-select-option>
+            <a-select-option :value="0">{{ $t('product.off_sale') }}</a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -136,10 +136,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import { api } from '@/api'
+
+const { t } = useI18n()
 
 const products = ref([])
 const categories = ref([])
@@ -159,7 +162,7 @@ const form = reactive({
   stock: 0,
   category_id: null,
   description: '',
-  images: [], // 确保是数组
+  images: [],
   status: 1
 })
 
@@ -171,49 +174,49 @@ const pagination = reactive({
   showQuickJumper: true
 })
 
-const columns = [
+const columns = computed(() => [
   {
-    title: '图片',
+    title: t('product.images'),
     key: 'image',
     width: 80
   },
   {
-    title: '商品名称',
+    title: t('product.name'),
     dataIndex: 'name',
     key: 'name'
   },
   {
-    title: '价格',
+    title: t('product.price'),
     key: 'price',
     width: 100
   },
   {
-    title: '库存',
+    title: t('product.stock'),
     dataIndex: 'stock',
     key: 'stock',
     width: 80
   },
   {
-    title: '分类',
+    title: t('product.category'),
     dataIndex: 'category_name',
     key: 'category_name'
   },
   {
-    title: '状态',
+    title: t('common.status'),
     key: 'status',
     width: 80
   },
   {
-    title: '创建时间',
+    title: t('common.created_at'),
     dataIndex: 'created_at',
     key: 'created_at'
   },
   {
-    title: '操作',
+    title: t('common.action'),
     key: 'action',
     width: 150
   }
-]
+])
 
 const loadProducts = async () => {
   loading.value = true
@@ -230,7 +233,7 @@ const loadProducts = async () => {
       pagination.total = response.data.total
     }
   } catch (error) {
-    message.error('加载商品列表失败')
+    message.error(t('common.error'))
   } finally {
     loading.value = false
   }
@@ -243,7 +246,7 @@ const loadCategories = async () => {
       categories.value = response.data
     }
   } catch (error) {
-    message.error('加载分类失败')
+    message.error(t('common.error'))
   }
 }
 
@@ -263,26 +266,26 @@ const handleSubmit = async () => {
   try {
     if (isEdit.value) {
       await api.updateProduct(form.id, form)
-      message.success('商品更新成功')
+      message.success(t('product.product_updated'))
     } else {
       await api.createProduct(form)
-      message.success('商品创建成功')
+      message.success(t('product.product_created'))
     }
     
     modalVisible.value = false
     loadProducts()
   } catch (error) {
-    message.error('操作失败')
+    message.error(t('common.error'))
   }
 }
 
 const deleteProduct = async (id) => {
   try {
     await api.deleteProduct(id)
-    message.success('商品删除成功')
+    message.success(t('product.product_deleted'))
     loadProducts()
   } catch (error) {
-    message.error('删除失败')
+    message.error(t('common.error'))
   }
 }
 
@@ -316,7 +319,7 @@ const resetForm = () => {
   form.stock = 0
   form.category_id = null
   form.description = ''
-  form.images = [] // 确保是数组
+  form.images = []
   form.status = 1
 }
 

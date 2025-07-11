@@ -1,10 +1,10 @@
 <template>
   <div class="users">
     <div class="page-header">
-      <h2>{{ $t('menu.users') }}</h2>
+      <h2>{{ $t('user.title') }}</h2>
       <a-button type="primary" @click="showCreateModal">
         <template #icon><plus-outlined /></template>
-        {{ $t('common.add') }}用户
+        {{ $t('user.create_user') }}
       </a-button>
     </div>
 
@@ -14,19 +14,19 @@
           <a-form-item>
             <a-input
               v-model:value="searchForm.search"
-              :placeholder="$t('common.search') + '用户名或邮箱'"
+              :placeholder="$t('common.search') + $t('user.username') + '/' + $t('user.email')"
               style="width: 200px;"
             />
           </a-form-item>
           <a-form-item>
             <a-select
               v-model:value="searchForm.status"
-              placeholder="状态"
+              :placeholder="$t('common.status')"
               style="width: 120px;"
               allowClear
             >
-              <a-select-option :value="1">启用</a-select-option>
-              <a-select-option :value="0">禁用</a-select-option>
+              <a-select-option :value="1">{{ $t('common.enable') }}</a-select-option>
+              <a-select-option :value="0">{{ $t('common.disable') }}</a-select-option>
             </a-select>
           </a-form-item>
           <a-form-item>
@@ -50,7 +50,7 @@
           </template>
           <template v-else-if="column.key === 'status'">
             <a-tag :color="record.status === 1 ? 'green' : 'red'">
-              {{ record.status === 1 ? '启用' : '禁用' }}
+              {{ record.status === 1 ? $t('common.enable') : $t('common.disable') }}
             </a-tag>
           </template>
           <template v-else-if="column.key === 'role_name'">
@@ -61,17 +61,15 @@
           <template v-else-if="column.key === 'action'">
             <a-button type="link" @click="editUser(record)">{{ $t('common.edit') }}</a-button>
             
-            <!-- 根据用户是否可删除显示不同的删除按钮 -->
             <a-popconfirm
               v-if="canDelete(record)"
-              title="确定要删除这个用户吗？"
+              :title="$t('user.delete_confirm')"
               @confirm="deleteUser(record.id)"
             >
               <a-button type="link" danger>{{ $t('common.delete') }}</a-button>
             </a-popconfirm>
             
-            <!-- 不可删除的用户显示禁用的删除按钮 -->
-            <a-tooltip v-else title="管理员账户不可删除">
+            <a-tooltip v-else :title="$t('user.cannot_delete_admin')">
               <a-button type="link" danger disabled>{{ $t('common.delete') }}</a-button>
             </a-tooltip>
           </template>
@@ -82,30 +80,30 @@
     <!-- 新增/编辑用户弹窗 -->
     <a-modal
       v-model:open="modalVisible"
-      :title="isEdit ? '编辑用户' : '新增用户'"
+      :title="isEdit ? $t('user.edit_user') : $t('user.create_user')"
       @ok="handleSubmit"
       @cancel="handleCancel"
     >
       <a-form :model="form" :label-col="{ span: 6 }">
-        <a-form-item label="用户名" name="username">
+        <a-form-item :label="$t('user.username')" name="username">
           <a-input 
             v-model:value="form.username" 
             :disabled="isEdit && isAdminUser(form)"
           />
         </a-form-item>
-        <a-form-item label="邮箱" name="email">
+        <a-form-item :label="$t('user.email')" name="email">
           <a-input v-model:value="form.email" />
         </a-form-item>
-        <a-form-item label="密码" name="password" v-if="!isEdit">
+        <a-form-item :label="$t('auth.password')" name="password" v-if="!isEdit">
           <a-input-password v-model:value="form.password" />
         </a-form-item>
-        <a-form-item label="电话" name="phone">
+        <a-form-item :label="$t('user.phone')" name="phone">
           <a-input v-model:value="form.phone" />
         </a-form-item>
-        <a-form-item label="地址" name="address">
+        <a-form-item :label="$t('user.address')" name="address">
           <a-input v-model:value="form.address" />
         </a-form-item>
-        <a-form-item label="角色" name="role_id">
+        <a-form-item :label="$t('user.role')" name="role_id">
           <a-select 
             v-model:value="form.role_id"
             :disabled="isEdit && isAdminUser(form)"
@@ -119,13 +117,13 @@
             </a-select-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="状态" name="status">
+        <a-form-item :label="$t('common.status')" name="status">
           <a-select 
             v-model:value="form.status"
             :disabled="isEdit && isAdminUser(form)"
           >
-            <a-select-option :value="1">启用</a-select-option>
-            <a-select-option :value="0">禁用</a-select-option>
+            <a-select-option :value="1">{{ $t('common.enable') }}</a-select-option>
+            <a-select-option :value="0">{{ $t('common.disable') }}</a-select-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -134,10 +132,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import { api } from '@/api'
+
+const { t } = useI18n()
 
 const users = ref([])
 const roles = ref([])
@@ -169,48 +170,48 @@ const pagination = reactive({
   showQuickJumper: true
 })
 
-const columns = [
+const columns = computed(() => [
   {
-    title: '头像',
+    title: t('user.avatar'),
     key: 'avatar',
     width: 80
   },
   {
-    title: '用户名',
+    title: t('user.username'),
     dataIndex: 'username',
     key: 'username'
   },
   {
-    title: '邮箱',
+    title: t('user.email'),
     dataIndex: 'email',
     key: 'email'
   },
   {
-    title: '电话',
+    title: t('user.phone'),
     dataIndex: 'phone',
     key: 'phone'
   },
   {
-    title: '角色',
+    title: t('user.role'),
     key: 'role_name',
     width: 100
   },
   {
-    title: '状态',
+    title: t('common.status'),
     key: 'status',
     width: 80
   },
   {
-    title: '创建时间',
+    title: t('common.created_at'),
     dataIndex: 'created_at',
     key: 'created_at'
   },
   {
-    title: '操作',
+    title: t('common.action'),
     key: 'action',
     width: 150
   }
-]
+])
 
 // 检查用户是否可删除
 const canDelete = (user) => {
@@ -227,7 +228,10 @@ const getRoleColor = (roleName) => {
   const colorMap = {
     '超级管理员': 'red',
     '管理员': 'orange',
-    '普通用户': 'blue'
+    '普通用户': 'blue',
+    'Super Admin': 'red',
+    'Admin': 'orange',
+    'User': 'blue'
   }
   return colorMap[roleName] || 'default'
 }
@@ -247,7 +251,7 @@ const loadUsers = async () => {
       pagination.total = response.data.total
     }
   } catch (error) {
-    message.error('加载用户列表失败')
+    message.error(t('common.error'))
   } finally {
     loading.value = false
   }
@@ -260,7 +264,7 @@ const loadRoles = async () => {
       roles.value = response.data
     }
   } catch (error) {
-    message.error('加载角色列表失败')
+    message.error(t('common.error'))
   }
 }
 
@@ -279,32 +283,31 @@ const editUser = (record) => {
 const handleSubmit = async () => {
   try {
     if (isEdit.value) {
-      // 如果是编辑管理员用户，给出提示
       if (isAdminUser(form)) {
-        message.warning('管理员账户的敏感信息不可修改')
+        message.warning(t('user.admin_fields_readonly'))
       }
       
       await api.updateUser(form.id, form)
-      message.success('用户更新成功')
+      message.success(t('user.user_updated'))
     } else {
       await api.createUser(form)
-      message.success('用户创建成功')
+      message.success(t('user.user_created'))
     }
     
     modalVisible.value = false
     loadUsers()
   } catch (error) {
-    message.error('操作失败: ' + (error.message || '未知错误'))
+    message.error(t('common.error') + ': ' + (error.message || t('common.error')))
   }
 }
 
 const deleteUser = async (id) => {
   try {
     await api.deleteUser(id)
-    message.success('用户删除成功')
+    message.success(t('user.user_deleted'))
     loadUsers()
   } catch (error) {
-    message.error('删除失败: ' + (error.message || '未知错误'))
+    message.error(t('common.error') + ': ' + (error.message || t('common.error')))
   }
 }
 
