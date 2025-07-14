@@ -2,164 +2,158 @@ use tauri::State;
 use sqlx::Row;
 use crate::{AppState, models::user::*};
 use crate::api::{ApiResponse, PaginatedResponse};
-use crate::api::auth::{check_permission, get_user_id_from_token};
 
 #[tauri::command]
 pub async fn get_users(
     state: State<'_, AppState>,
-    token: String,
     page: Option<i32>,
     per_page: Option<i32>,
     search: Option<String>,
-    status: Option<i32>,
 ) -> Result<ApiResponse<PaginatedResponse<UserWithRole>>, String> {
-    println!("get_users called with token: {}", token);
-    
-    // 权限检查
-    if let Some(user_id) = get_user_id_from_token(&token) {
-        println!("User ID from token: {}", user_id);
-        
-        let has_permission = check_permission(&state, user_id, "user:read").await?;
-        println!("Permission check result: {}", has_permission);
-        
-        if !has_permission {
-            return Ok(ApiResponse {
-                success: false,
-                data: PaginatedResponse {
-                    items: vec![],
-                    total: 0,
-                    page: 1,
-                    per_page: 10,
-                },
-                message: "没有权限访问用户管理".to_string(),
-            });
-        }
-    } else {
-        println!("Invalid token: {}", token);
-        return Ok(ApiResponse {
-            success: false,
-            data: PaginatedResponse {
-                items: vec![],
-                total: 0,
-                page: 1,
-                per_page: 10,
-            },
-            message: "无效的token".to_string(),
-        });
-    }
-
-    println!("Permission check passed, loading users...");
-
     let page = page.unwrap_or(1);
     let per_page = per_page.unwrap_or(10);
     let offset = (page - 1) * per_page;
-
-    let mut base_query = r#"
-        SELECT u.id, u.username, u.email, u.phone, u.address, u.avatar, u.role_id, r.name as role_name,
-               u.status, u.created_at, u.updated_at
-        FROM users u
-        LEFT JOIN roles r ON u.role_id = r.id
-        WHERE 1=1
-    "#.to_string();
-
-    let mut params = Vec::new();
-    let mut param_count = 0;
+    
+    let db = state.db.lock().await;
 
     if let Some(search_term) = &search {
-        if !search_term.is_empty() {
-            param_count += 1;
-            base_query.push_str(&format!(" AND (u.username LIKE ?{} OR u.email LIKE ?{})", param_count, param_count + 1));
-            params.push(format!("%{}%", search_term));
-            params.push(format!("%{}%", search_term));
-            param_count += 1;
-        }
-    }
-
-    if let Some(status_filter) = status {
-        param_count += 1;
-        base_query.push_str(&format!(" AND u.status = ?{}", param_count));
-        params.push(status_filter.to_string());
-    }
-
-    let count_query = format!("SELECT COUNT(*) FROM ({}) as counted", base_query);
-    let data_query = format!("{} ORDER BY u.created_at DESC LIMIT {} OFFSET {}", base_query, per_page, offset);
-
-    let mut count_query_builder = sqlx::query(&count_query);
-    let mut data_query_builder = sqlx::query(&data_query);
-
-    for param in &params {
-        count_query_builder = count_query_builder.bind(param);
-        data_query_builder = data_query_builder.bind(param);
-    }
-
-    let total = count_query_builder
-        .fetch_one(&state.db.pool)
+        let search_pattern = format!("%{}%", search_term);
+        
+        let rows = sqlx::query(
+            r#"
+            SELECT u.id, u.username, u.email, u.phone, u.address, u.avatar, 
+                   u.role_id, r.name as role_name, r.permissions, u.status, u.created_at, u.updated_at
+            FROM users u
+            LEFT JOIN roles r ON u.role_id = r.id
+            WHERE u.username LIKE ? OR u.email LIKE ?
+            ORDER BY u.created_at DESC LIMIT ? OFFSET ?
+            "#
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(per_page)
+        .bind(offset)
+        .fetch_all(&db.pool)
         .await
-        .map_err(|e| {
-            println!("Database error in count query: {}", e);
-            e.to_string()
-        })?
-        .get::<i64, _>(0);
+        .map_err(|e| e.to_string())?;
 
-    let rows = data_query_builder
-        .fetch_all(&state.db.pool)
+        let total = sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM users u LEFT JOIN roles r ON u.role_id = r.id WHERE u.username LIKE ? OR u.email LIKE ?"
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .fetch_one(&db.pool)
         .await
-        .map_err(|e| {
-            println!("Database error in data query: {}", e);
-            e.to_string()
-        })?;
+        .map_err(|e| e.to_string())?;
 
-    let mut users = Vec::new();
-    for row in rows {
-        users.push(UserWithRole {
-            id: row.get("id"),
-            username: row.get("username"),
-            email: row.get("email"),
-            phone: row.get("phone"),
-            address: row.get("address"),
-            avatar: row.get("avatar"),
-            role_id: row.get("role_id"),
-            role_name: row.get("role_name"),
-            status: row.get("status"),
-            created_at: row.get("created_at"),
-            updated_at: row.get("updated_at"),
-        });
+        let users: Vec<UserWithRole> = rows.into_iter().map(|row| {
+            UserWithRole {
+                id: row.get("id"),
+                username: row.get("username"),
+                email: row.get("email"),
+                phone: row.get("phone"),
+                address: row.get("address"),
+                avatar: row.get("avatar"),
+                role_id: row.get("role_id"),
+                role_name: row.get::<Option<String>, _>("role_name").unwrap_or_else(|| "未知角色".to_string()),
+                permissions: row.get::<Option<String>, _>("permissions").unwrap_or_else(|| "[]".to_string()),
+                status: row.get("status"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            }
+        }).collect();
+
+        let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+
+        let response = PaginatedResponse {
+            items: users,
+            total,
+            page,
+            per_page,
+            total_pages,
+        };
+
+        Ok(ApiResponse::success(response))
+    } else {
+        let rows = sqlx::query(
+            r#"
+            SELECT u.id, u.username, u.email, u.phone, u.address, u.avatar, 
+                   u.role_id, r.name as role_name, r.permissions, u.status, u.created_at, u.updated_at
+            FROM users u
+            LEFT JOIN roles r ON u.role_id = r.id
+            ORDER BY u.created_at DESC LIMIT ? OFFSET ?
+            "#
+        )
+        .bind(per_page)
+        .bind(offset)
+        .fetch_all(&db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        let total = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
+            .fetch_one(&db.pool)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let users: Vec<UserWithRole> = rows.into_iter().map(|row| {
+            UserWithRole {
+                id: row.get("id"),
+                username: row.get("username"),
+                email: row.get("email"),
+                phone: row.get("phone"),
+                address: row.get("address"),
+                avatar: row.get("avatar"),
+                role_id: row.get("role_id"),
+                role_name: row.get::<Option<String>, _>("role_name").unwrap_or_else(|| "未知角色".to_string()),
+                permissions: row.get::<Option<String>, _>("permissions").unwrap_or_else(|| "[]".to_string()),
+                status: row.get("status"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            }
+        }).collect();
+
+        let total_pages = (total as f64 / per_page as f64).ceil() as i64;
+
+        let response = PaginatedResponse {
+            items: users,
+            total,
+            page,
+            per_page,
+            total_pages,
+        };
+
+        Ok(ApiResponse::success(response))
     }
-
-    println!("Successfully loaded {} users", users.len());
-
-    Ok(ApiResponse::success(PaginatedResponse {
-        items: users,
-        total,
-        page,
-        per_page,
-    }))
 }
 
 #[tauri::command]
 pub async fn create_user(
     state: State<'_, AppState>,
-    token: String,
     request: CreateUserRequest,
 ) -> Result<ApiResponse<User>, String> {
-    // 权限检查
-    if let Some(user_id) = get_user_id_from_token(&token) {
-        if !check_permission(&state, user_id, "user:write").await? {
-            return Err("没有权限创建用户".to_string());
-        }
-    } else {
-        return Err("无效的token".to_string());
+    let db = state.db.lock().await;
+    
+    // 检查用户名和邮箱是否已存在
+    let existing = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM users WHERE username = ? OR email = ?"
+    )
+    .bind(&request.username)
+    .bind(&request.email)
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if existing > 0 {
+        return Ok(ApiResponse::error("用户名或邮箱已存在".to_string()));
     }
 
+    // 加密密码
     let password_hash = bcrypt::hash(&request.password, bcrypt::DEFAULT_COST)
         .map_err(|e| e.to_string())?;
 
-    let user = sqlx::query_as::<_, User>(
-        r#"
-        INSERT INTO users (username, email, password_hash, phone, address, avatar, role_id, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        RETURNING *
-        "#
+    let result = sqlx::query(
+        r#"INSERT INTO users (username, email, password_hash, phone, address, avatar, role_id, status, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
     )
     .bind(&request.username)
     .bind(&request.email)
@@ -168,8 +162,18 @@ pub async fn create_user(
     .bind(&request.address)
     .bind(&request.avatar)
     .bind(request.role_id)
-    .bind(request.status)
-    .fetch_one(&state.db.pool)
+    .bind(1) // 默认状态为启用
+    .bind(chrono::Utc::now())
+    .bind(chrono::Utc::now())
+    .execute(&db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let user = sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE id = ?"
+    )
+    .bind(result.last_insert_rowid())
+    .fetch_one(&db.pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -182,30 +186,53 @@ pub async fn update_user(
     user_id: i64,
     request: UpdateUserRequest,
 ) -> Result<ApiResponse<User>, String> {
-    let user = sqlx::query_as::<_, User>(
-        r#"
-        UPDATE users 
-        SET username = COALESCE(?, username),
-            email = COALESCE(?, email),
-            phone = COALESCE(?, phone),
-            address = COALESCE(?, address),
-            avatar = COALESCE(?, avatar),
-            role_id = COALESCE(?, role_id),
-            status = COALESCE(?, status),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        RETURNING *
-        "#
+    let db = state.db.lock().await;
+    
+    // 检查是否为admin用户，如果是则限制某些字段的修改
+    let current_user = sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE id = ?"
     )
-    .bind(&request.username)
-    .bind(&request.email)
-    .bind(&request.phone)
-    .bind(&request.address)
-    .bind(&request.avatar)
-    .bind(request.role_id)
-    .bind(request.status)
     .bind(user_id)
-    .fetch_one(&state.db.pool)
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if current_user.username == "admin" {
+        // 对于admin用户，只更新基本信息，不更新敏感信息
+        sqlx::query(
+            "UPDATE users SET phone = ?, address = ?, avatar = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(&request.phone)
+        .bind(&request.address)
+        .bind(&request.avatar)
+        .bind(chrono::Utc::now())
+        .bind(user_id)
+        .execute(&db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    } else {
+        // 对于普通用户，可以更新所有字段
+        sqlx::query(
+            "UPDATE users SET username = ?, email = ?, phone = ?, address = ?, avatar = ?, role_id = ?, updated_at = ? WHERE id = ?"
+        )
+        .bind(&request.username)
+        .bind(&request.email)
+        .bind(&request.phone)
+        .bind(&request.address)
+        .bind(&request.avatar)
+        .bind(request.role_id)
+        .bind(chrono::Utc::now())
+        .bind(user_id)
+        .execute(&db.pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    }
+
+    let user = sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE id = ?"
+    )
+    .bind(user_id)
+    .fetch_one(&db.pool)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -218,9 +245,11 @@ pub async fn delete_user(
     user_id: i64,
 ) -> Result<ApiResponse<()>, String> {
     // 检查是否为admin用户（假设admin用户的ID为1，或者用户名为admin）
+    let db = state.db.lock().await;
+    
     let user = sqlx::query("SELECT id, username FROM users WHERE id = ?")
         .bind(user_id)
-        .fetch_one(&state.db.pool)
+        .fetch_one(&db.pool)
         .await
         .map_err(|e| e.to_string())?;
     
@@ -228,50 +257,14 @@ pub async fn delete_user(
     
     // 禁止删除admin用户
     if username == "admin" || user_id == 1 {
-        return Err("不允许删除管理员账户".to_string());
+        return Ok(ApiResponse::error("管理员账户不可删除".to_string()));
     }
     
-    // 检查是否为超级管理员角色
-    let role_check = sqlx::query("SELECT role_id FROM users WHERE id = ?")
-        .bind(user_id)
-        .fetch_one(&state.db.pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    
-    let role_id: i64 = role_check.get("role_id");
-    
-    // 禁止删除超级管理员（假设超级管理员角色ID为1）
-    if role_id == 1 {
-        return Err("不允许删除超级管理员".to_string());
-    }
-
-    // 执行删除操作
     sqlx::query("DELETE FROM users WHERE id = ?")
         .bind(user_id)
-        .execute(&state.db.pool)
+        .execute(&db.pool)
         .await
         .map_err(|e| e.to_string())?;
 
     Ok(ApiResponse::success(()))
-}
-
-// 添加一个检查用户是否可删除的API
-#[tauri::command]
-pub async fn can_delete_user(
-    state: State<'_, AppState>,
-    user_id: i64,
-) -> Result<ApiResponse<bool>, String> {
-    let user = sqlx::query("SELECT username, role_id FROM users WHERE id = ?")
-        .bind(user_id)
-        .fetch_one(&state.db.pool)
-        .await
-        .map_err(|e| e.to_string())?;
-    
-    let username: String = user.get("username");
-    let role_id: i64 = user.get("role_id");
-    
-    // admin用户或超级管理员不可删除
-    let can_delete = username != "admin" && user_id != 1 && role_id != 1;
-    
-    Ok(ApiResponse::success(can_delete))
 } 

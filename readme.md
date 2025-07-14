@@ -258,7 +258,7 @@ VITE_DEV_SERVER_PORT=1420
 - **system_settings** - 系统设置表
 - **logs** - 操作日志表
 
-## �� 开发指南
+## 📄 开发指南
 
 ### 添加新功能
 

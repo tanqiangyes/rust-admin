@@ -1,71 +1,8 @@
 use tauri::State;
-use crate::{AppState, models::user::*, utils::permissions::Permission};
+use crate::{AppState, models::user::*, models::role::Role, utils::permissions::Permission};
 use crate::api::ApiResponse;
-
-// 权限检查函数
-pub async fn check_permission(
-    state: &State<'_, AppState>,
-    user_id: i64,
-    required_permission: &str,
-) -> Result<bool, String> {
-    // 获取用户角色权限
-    let permissions = sqlx::query_scalar::<_, String>(
-        "SELECT r.permissions FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?"
-    )
-    .bind(user_id)
-    .fetch_one(&state.db.pool)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    Ok(Permission::has_permission(&permissions, required_permission))
-}
-
-// 获取当前用户ID（从token中解析，这里简化处理）
-pub fn get_user_id_from_token(token: &str) -> Option<i64> {
-    // 这里是简化的token解析，实际项目中应该使用JWT
-    if token.starts_with("token_") {
-        let parts: Vec<&str> = token.split('_').collect();
-        if parts.len() >= 2 {
-            return parts[1].parse().ok();
-        }
-    }
-    None
-}
-
-#[tauri::command]
-pub async fn check_user_permission(
-    state: State<'_, AppState>,
-    token: String,
-    permission: String,
-) -> Result<ApiResponse<bool>, String> {
-    if let Some(user_id) = get_user_id_from_token(&token) {
-        let has_permission = check_permission(&state, user_id, &permission).await?;
-        Ok(ApiResponse::success(has_permission))
-    } else {
-        Ok(ApiResponse::success(false))
-    }
-}
-
-#[tauri::command]
-pub async fn get_user_permissions(
-    state: State<'_, AppState>,
-    token: String,
-) -> Result<ApiResponse<Vec<String>>, String> {
-    if let Some(user_id) = get_user_id_from_token(&token) {
-        let permissions = sqlx::query_scalar::<_, String>(
-            "SELECT r.permissions FROM users u JOIN roles r ON u.role_id = r.id WHERE u.id = ?"
-        )
-        .bind(user_id)
-        .fetch_one(&state.db.pool)
-        .await
-        .map_err(|e| e.to_string())?;
-
-        let user_permissions = Permission::get_permissions(&permissions);
-        Ok(ApiResponse::success(user_permissions))
-    } else {
-        Ok(ApiResponse::success(vec![]))
-    }
-}
+use chrono::{Duration, Utc};
+use crate::database::Database;
 
 #[tauri::command]
 pub async fn login(
@@ -74,120 +11,95 @@ pub async fn login(
 ) -> Result<ApiResponse<LoginResponse>, String> {
     println!("Login attempt for username: {}", request.username);
     
+    // 获取数据库连接
+    let db = state.db.lock().await;
+    
+    // 获取系统设置
+    let max_attempts = get_system_setting(&db, "max_login_attempts", "5").await.parse::<i32>().unwrap_or(5);
+    let lockout_duration = get_system_setting(&db, "lockout_duration", "300").await.parse::<i64>().unwrap_or(300);
+    let reset_attempts_after = get_system_setting(&db, "reset_attempts_after", "3600").await.parse::<i64>().unwrap_or(3600);
+    
     // 查找用户
     let user_result = sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE username = ? OR email = ?"
     )
     .bind(&request.username)
     .bind(&request.username)
-    .fetch_optional(&state.db.pool)
+    .fetch_optional(&db.pool)
     .await
     .map_err(|e| {
         println!("Database error: {}", e);
-        format!("数据库错误: {}", e)
+        e.to_string()
     })?;
 
-    let user = match user_result {
+    let mut user = match user_result {
         Some(user) => user,
         None => {
             println!("User not found: {}", request.username);
-            return Ok(ApiResponse {
-                success: false,
-                data: LoginResponse::default(),
-                message: "用户名或密码错误".to_string(),
-            });
+            return Ok(ApiResponse::error("用户名或密码错误".to_string()));
         }
     };
 
+    // 检查用户是否被锁定
+    if let Some(locked_until) = user.locked_until {
+        if Utc::now() < locked_until {
+            let remaining_seconds = (locked_until - Utc::now()).num_seconds();
+            return Ok(ApiResponse::error(format!("账户已被锁定，请在 {} 分钟后重试", remaining_seconds / 60)));
+        } else {
+            // 解锁用户
+            user.locked_until = None;
+            user.failed_login_attempts = 0;
+            update_user_login_status(&db, &user).await?;
+        }
+    }
+
+    // 检查是否需要重置登录尝试次数
+    if let Some(last_failed) = user.last_failed_login {
+        if (Utc::now() - last_failed).num_seconds() > reset_attempts_after {
+            user.failed_login_attempts = 0;
+            update_user_login_status(&db, &user).await?;
+        }
+    }
+
     // 验证密码
     let password_valid = bcrypt::verify(&request.password, &user.password_hash)
-        .map_err(|e| {
-            println!("Password verification error: {}", e);
-            format!("密码验证错误: {}", e)
-        })?;
+        .map_err(|e| e.to_string())?;
 
     if !password_valid {
-        println!("Invalid password for user: {}", request.username);
-        return Ok(ApiResponse {
-            success: false,
-            data: LoginResponse::default(),
-            message: "用户名或密码错误".to_string(),
-        });
+        // 密码错误，增加失败次数
+        user.failed_login_attempts += 1;
+        user.last_failed_login = Some(Utc::now());
+
+        // 检查是否需要锁定账户
+        if user.failed_login_attempts >= max_attempts {
+            user.locked_until = Some(Utc::now() + Duration::seconds(lockout_duration));
+            update_user_login_status(&db, &user).await?;
+            return Ok(ApiResponse::error(format!("登录失败次数过多，账户已被锁定 {} 分钟", lockout_duration / 60)));
+        } else {
+            update_user_login_status(&db, &user).await?;
+            let remaining_attempts = max_attempts - user.failed_login_attempts;
+            return Ok(ApiResponse::error(format!("用户名或密码错误，还有 {} 次尝试机会", remaining_attempts)));
+        }
     }
 
-    // 检查用户状态
-    if user.status != 1 {
-        println!("User is disabled: {}", request.username);
-        return Ok(ApiResponse {
-            success: false,
-            data: LoginResponse::default(),
-            message: "用户账户已被禁用".to_string(),
-        });
-    }
+    // 登录成功，重置失败次数
+    user.failed_login_attempts = 0;
+    user.last_failed_login = None;
+    user.locked_until = None;
+    user.last_login = Some(Utc::now());
+    update_user_login_status(&db, &user).await?;
 
-    // 获取用户角色信息
-    let role_name = sqlx::query_scalar::<_, String>(
-        "SELECT name FROM roles WHERE id = ?"
+    // 获取用户角色
+    let role = sqlx::query_as::<_, Role>(
+        "SELECT * FROM roles WHERE id = ?"
     )
     .bind(user.role_id)
-    .fetch_one(&state.db.pool)
-    .await
-    .unwrap_or_else(|_| "普通用户".to_string());
-
-    // 生成简单的token
-    let token = format!("token_{}_{}", user.id, chrono::Utc::now().timestamp());
-
-    println!("Login successful for user: {}", request.username);
-
-    let response = LoginResponse {
-        token,
-        user: UserWithRole {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-            phone: user.phone,
-            address: user.address,
-            avatar: user.avatar,
-            role_id: user.role_id,
-            role_name,
-            status: user.status,
-            created_at: user.created_at,
-            updated_at: user.updated_at,
-        },
-    };
-
-    Ok(ApiResponse::success(response))
-}
-
-#[tauri::command]
-pub async fn logout(
-    _state: State<'_, AppState>,
-) -> Result<ApiResponse<()>, String> {
-    Ok(ApiResponse::success(()))
-}
-
-#[tauri::command]
-pub async fn get_current_user(
-    state: State<'_, AppState>,
-    user_id: i64,
-) -> Result<ApiResponse<UserWithRole>, String> {
-    let user = sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE id = ?"
-    )
-    .bind(user_id)
-    .fetch_one(&state.db.pool)
+    .fetch_one(&db.pool)
     .await
     .map_err(|e| e.to_string())?;
 
-    let role_name = sqlx::query_scalar::<_, String>(
-        "SELECT name FROM roles WHERE id = ?"
-    )
-    .bind(user.role_id)
-    .fetch_one(&state.db.pool)
-    .await
-    .unwrap_or_else(|_| "普通用户".to_string());
-
-    let user_with_role = UserWithRole {
+    // 创建用户响应
+    let user_response = UserResponse {
         id: user.id,
         username: user.username,
         email: user.email,
@@ -195,11 +107,146 @@ pub async fn get_current_user(
         address: user.address,
         avatar: user.avatar,
         role_id: user.role_id,
-        role_name,
+        role_name: role.name,
+        permissions: role.permissions,
         status: user.status,
         created_at: user.created_at,
         updated_at: user.updated_at,
     };
 
-    Ok(ApiResponse::success(user_with_role))
+    let login_response = LoginResponse {
+        token: format!("mock_token_{}", user.id),
+        user: user_response,
+    };
+
+    Ok(ApiResponse::success(login_response))
+}
+
+#[tauri::command]
+pub async fn logout() -> Result<ApiResponse<()>, String> {
+    Ok(ApiResponse::success(()))
+}
+
+#[tauri::command]
+pub async fn get_current_user(
+    state: State<'_, AppState>,
+    user_id: i64,
+) -> Result<ApiResponse<UserResponse>, String> {
+    let db = state.db.lock().await;
+    
+    let user = sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE id = ?"
+    )
+    .bind(user_id)
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let role = sqlx::query_as::<_, Role>(
+        "SELECT * FROM roles WHERE id = ?"
+    )
+    .bind(user.role_id)
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let user_response = UserResponse {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        avatar: user.avatar,
+        role_id: user.role_id,
+        role_name: role.name,
+        permissions: role.permissions,
+        status: user.status,
+        created_at: user.created_at,
+        updated_at: user.updated_at,
+    };
+
+    Ok(ApiResponse::success(user_response))
+}
+
+// 辅助函数：更新用户登录状态
+async fn update_user_login_status(
+    db: &Database, 
+    user: &User
+) -> Result<(), String> {
+    sqlx::query(
+        r#"
+        UPDATE users 
+        SET failed_login_attempts = ?, last_failed_login = ?, locked_until = ?, last_login = ?
+        WHERE id = ?
+        "#
+    )
+    .bind(user.failed_login_attempts)
+    .bind(user.last_failed_login)
+    .bind(user.locked_until)
+    .bind(user.last_login)
+    .bind(user.id)
+    .execute(&db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+// 辅助函数：获取系统设置
+async fn get_system_setting(db: &Database, key: &str, default: &str) -> String {
+    let result = sqlx::query_scalar::<_, String>(
+        "SELECT setting_value FROM system_settings WHERE setting_key = ?"
+    )
+    .bind(key)
+    .fetch_optional(&db.pool)
+    .await;
+
+    match result {
+        Ok(Some(value)) => value,
+        _ => default.to_string(),
+    }
+}
+
+#[tauri::command]
+pub async fn check_permission(
+    permissions: String,
+    required_permission: String,
+) -> Result<bool, String> {
+    Ok(Permission::has_permission(&permissions, &required_permission))
+}
+
+#[tauri::command]
+pub async fn get_user_permissions(
+    state: State<'_, AppState>,
+    user_id: i64,
+) -> Result<ApiResponse<crate::api::PaginatedResponse<String>>, String> {
+    let db = state.db.lock().await;
+    
+    let user = sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE id = ?"
+    )
+    .bind(user_id)
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let role = sqlx::query_as::<_, Role>(
+        "SELECT * FROM roles WHERE id = ?"
+    )
+    .bind(user.role_id)
+    .fetch_one(&db.pool)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 解析权限
+    let user_permissions = Permission::get_permissions(&role.permissions);
+    let permissions: Vec<String> = user_permissions.into_iter().collect();
+
+    Ok(ApiResponse::success(crate::api::PaginatedResponse {
+        items: permissions.clone(),
+        total: permissions.len() as i64,
+        page: 1,
+        per_page: permissions.len() as i32,
+        total_pages: 1,
+    }))
 } 

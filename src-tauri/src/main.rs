@@ -7,24 +7,20 @@ mod models;
 mod utils;
 
 use database::Database;
-use std::env;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub struct AppState {
-    db: Database,
+    db: Arc<Mutex<Database>>,
 }
 
 #[tokio::main]
 async fn main() {
-    // 设置工作目录
-    if let Ok(exe_path) = env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let _ = env::set_current_dir(exe_dir);
-        }
-    }
-    
     // 初始化数据库
     let db = Database::new().await.expect("Failed to initialize database");
-    let app_state = AppState { db };
+    let app_state = AppState {
+        db: Arc::new(Mutex::new(db)),
+    };
 
     tauri::Builder::default()
         .manage(app_state)
@@ -33,40 +29,45 @@ async fn main() {
             api::auth::login,
             api::auth::logout,
             api::auth::get_current_user,
-            api::auth::check_user_permission,
-            api::auth::get_user_permissions,
-            // 用户管理（已更新为需要权限）
+            
+            // 用户管理
             api::users::get_users,
             api::users::create_user,
             api::users::update_user,
             api::users::delete_user,
-            api::users::can_delete_user, // 添加这个新命令
+            
             // 商品管理
             api::products::get_products,
             api::products::create_product,
             api::products::update_product,
             api::products::delete_product,
+            
             // 订单管理
             api::orders::get_orders,
-            api::orders::get_order_by_id,
+            api::orders::create_order,
             api::orders::update_order_status,
+            
             // 分类管理
             api::categories::get_categories,
             api::categories::create_category,
             api::categories::update_category,
             api::categories::delete_category,
+            
             // 角色管理
             api::roles::get_roles,
+            
             // 统计信息
             api::stats::get_dashboard_stats,
             api::stats::get_system_info,
-            // 设置
+            
+            // 日志管理
+            api::logs::get_logs,
+            api::logs::create_log,
+            api::logs::get_login_logs,
             api::settings::get_all_settings,
             api::settings::save_system_settings,
             api::settings::save_ui_settings,
             api::settings::save_security_settings,
-            api::settings::update_setting,
-            api::settings::get_system_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

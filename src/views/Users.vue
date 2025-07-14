@@ -77,6 +77,16 @@
           <template v-else-if="column.key === 'action'">
             <a-button type="link" @click="editUser(record)">{{ $t('common.edit') }}</a-button>
             
+            <!-- 如果用户被锁定，显示解锁按钮 -->
+            <a-button 
+              v-if="isUserLocked(record)" 
+              type="link" 
+              @click="unlockUser(record)"
+              style="color: orange;"
+            >
+              解锁
+            </a-button>
+            
             <a-popconfirm
               v-if="canDelete(record)"
               :title="$t('user.delete_confirm')"
@@ -241,6 +251,26 @@ const canDelete = (user) => {
 // 检查是否为管理员用户
 const isAdminUser = (user) => {
   return user.username === 'admin' || user.id === 1 || user.role_id === 1
+}
+
+// 检查用户是否被锁定
+const isUserLocked = (user) => {
+  return user.locked_until && new Date(user.locked_until) > new Date()
+}
+
+// 解锁用户
+const unlockUser = async (user) => {
+  try {
+    const response = await api.unlockUserAccount(user.id)
+    if (response.success) {
+      message.success('用户账户已解锁')
+      loadUsers()
+    } else {
+      message.error(response.message || '解锁失败')
+    }
+  } catch (error) {
+    message.error('解锁失败: ' + (error.message || error))
+  }
 }
 
 const loadUsers = async () => {

@@ -16,7 +16,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // 用户表
+    // 用户表 - 包含所有必要字段
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS users (
@@ -29,58 +29,18 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             avatar TEXT,
             role_id INTEGER NOT NULL DEFAULT 3,
             status INTEGER NOT NULL DEFAULT 1,
+            failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+            last_failed_login DATETIME,
+            locked_until DATETIME,
+            last_login DATETIME,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (role_id) REFERENCES roles(id)
+            FOREIGN KEY (role_id) REFERENCES roles (id)
         )
         "#,
     )
     .execute(pool)
     .await?;
-
-    // 确保管理员有正确的权限
-    sqlx::query(
-        r#"
-        INSERT OR REPLACE INTO roles (id, name, permissions)
-        VALUES 
-            (1, '超级管理员', '["*"]'),
-            (2, '管理员', '["dashboard:read", "user:read", "user:write", "product:read", "product:write", "order:read", "order:write", "category:read", "category:write"]'),
-            (3, '普通用户', '["dashboard:read", "order:read"]')
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // 创建默认用户
-    let admin_password_hash = bcrypt::hash("admin123", bcrypt::DEFAULT_COST)
-        .unwrap_or_else(|_| "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkwzLUW9wjLXfGa".to_string());
-
-    let manager_password_hash = bcrypt::hash("manager123", bcrypt::DEFAULT_COST)
-        .unwrap_or_else(|_| "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkwzLUW9wjLXfGa".to_string());
-
-    let user_password_hash = bcrypt::hash("user123", bcrypt::DEFAULT_COST)
-        .unwrap_or_else(|_| "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewkwzLUW9wjLXfGa".to_string());
-
-    // 插入测试用户
-    sqlx::query(
-        r#"
-        INSERT OR REPLACE INTO users (id, username, email, password_hash, role_id, status)
-        VALUES 
-            (1, 'admin', 'admin@example.com', ?, 1, 1),
-            (2, 'manager', 'manager@example.com', ?, 2, 1),
-            (3, 'user', 'user@example.com', ?, 3, 1)
-        "#,
-    )
-    .bind(&admin_password_hash)
-    .bind(&manager_password_hash)
-    .bind(&user_password_hash)
-    .execute(pool)
-    .await?;
-
-    println!("Created test users:");
-    println!("  admin/admin123 (超级管理员)");
-    println!("  manager/manager123 (管理员)");
-    println!("  user/user123 (普通用户)");
 
     // 分类表
     sqlx::query(
@@ -185,7 +145,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
             ('system_version', '1.0.0', 'string', '系统版本'),
             ('theme_color', '#1890ff', 'string', '主题颜色'),
             ('language', 'zh-CN', 'string', '系统语言'),
-            ('page_size', '10', 'number', '默认页面大小')
+            ('page_size', '10', 'number', '默认页面大小'),
+            ('max_login_attempts', '5', 'number', '最大登录尝试次数'),
+            ('lockout_duration', '300', 'number', '账户锁定时间（秒）'),
+            ('reset_attempts_after', '3600', 'number', '重置尝试次数的时间间隔（秒）')
         "#,
     )
     .execute(pool)
@@ -204,26 +167,71 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    println!("Database migrations completed successfully!");
-
-    // 在迁移的最后，添加权限验证
-    println!("Verifying permissions...");
-
-    // 检查管理员权限
-    let manager_permissions = sqlx::query_scalar::<_, String>(
-        "SELECT permissions FROM roles WHERE name = '管理员'"
+    // 插入默认角色
+    sqlx::query(
+        r#"
+        INSERT OR REPLACE INTO roles (id, name, permissions)
+        VALUES 
+            (1, '超级管理员', '["*"]'),
+            (2, '管理员', '["dashboard:read", "user:read", "user:write", "product:read", "product:write", "order:read", "order:write", "category:read", "category:write"]'),
+            (3, '普通用户', '["dashboard:read", "order:read"]')
+        "#,
     )
-    .fetch_one(pool)
+    .execute(pool)
     .await?;
 
-    println!("Manager permissions: {}", manager_permissions);
+    // 插入默认用户
+    let password_hash = bcrypt::hash("123456", bcrypt::DEFAULT_COST).unwrap();
+    sqlx::query(
+        r#"
+        INSERT OR REPLACE INTO users (id, username, email, password_hash, role_id, status)
+        VALUES 
+            (1, 'admin', 'admin@example.com', ?, 1, 1),
+            (2, 'manager', 'manager@example.com', ?, 2, 1),
+            (3, 'user', 'user@example.com', ?, 3, 1)
+        "#,
+    )
+    .bind(&password_hash)
+    .bind(&password_hash)
+    .bind(&password_hash)
+    .execute(pool)
+    .await?;
 
-    // 检查是否包含 user:read 权限
-    if manager_permissions.contains("user:read") {
-        println!("✓ Manager has user:read permission");
-    } else {
-        println!("✗ Manager missing user:read permission");
+    println!("Database migrations completed with login limit features!");
+
+    // 移除权限验证部分，因为它可能导致查询失败
+    // 或者改为可选的验证
+    if let Ok(manager_permissions) = sqlx::query_scalar::<_, String>(
+        "SELECT permissions FROM roles WHERE name = '管理员'"
+    )
+    .fetch_optional(pool)
+    .await {
+        if let Some(permissions) = manager_permissions {
+            println!("Manager permissions: {}", permissions);
+            if permissions.contains("user:read") {
+                println!("✓ Manager has user:read permission");
+            } else {
+                println!("✗ Manager missing user:read permission");
+            }
+        }
     }
+
+    // 登录日志表 - 用于记录登录尝试
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS login_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            success INTEGER NOT NULL DEFAULT 0,
+            failure_reason TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 } 

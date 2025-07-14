@@ -6,10 +6,12 @@ use crate::api::ApiResponse;
 pub async fn get_roles(
     state: State<'_, AppState>,
 ) -> Result<ApiResponse<Vec<Role>>, String> {
+    let db = state.db.lock().await;
+    
     let roles = sqlx::query_as::<_, Role>(
         "SELECT * FROM roles ORDER BY id"
     )
-    .fetch_all(&state.db.pool)
+    .fetch_all(&db.pool)
     .await
     .map_err(|e| e.to_string())?;
 

@@ -189,5 +189,32 @@ export const api = {
   async getSystemSettings() {
     const token = localStorage.getItem('token')
     return await invoke('get_system_settings', { token })
+  },
+
+  // 解锁用户账户
+  async unlockUserAccount(userId) {
+    const token = localStorage.getItem('token')
+    return await invoke('unlock_user_account', { 
+      token,
+      userId 
+    })
+  },
+
+  // 获取登录日志
+  async getLoginLogs(params = {}) {
+    const token = localStorage.getItem('token')
+    return await invoke('get_login_logs', { 
+      token,
+      ...params 
+    })
+  }
+} 
+
+// 登录日志相关API
+export const loginLogsApi = {
+  // 获取登录日志列表
+  getLoginLogs: async (params = {}) => {
+    const { page = 1, per_page = 10 } = params
+    return await invoke('get_login_logs', { page, per_page })
   }
 } 
