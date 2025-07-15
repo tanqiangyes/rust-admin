@@ -1,4 +1,4 @@
-g# DDD架构重构规格说明 - Rust Admin后台管理系统
+# DDD架构重构规格说明 - Rust Admin后台管理系统
 
 ## 📋 项目概述
 
